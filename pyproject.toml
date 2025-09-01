@@ -38,7 +38,8 @@ Changelog = "https://github.com/pydantic/mcp-run-python/releases"
 [tool.uv.build-backend]
 module-name = "mcp_run_python"
 module-root = ""
-
+source-exclude = ["node_modules"]
+wheel-exclude = ["node_modules"]
 
 [dependency-groups]
 dev = [
@@ -51,6 +52,7 @@ dev = [
     "pytest>=8.3.3",
     "pytest-pretty>=1.2.0",
     "ruff>=0.12.11",
+    "coverage>=7.10.6",
 ]
 
 [project.scripts]

@@ -57,8 +57,9 @@ typecheck-py: ## Typecheck the code
 typecheck: typecheck-ts typecheck-py ## Typecheck all code
 
 .PHONY: test
-test: ## Run tests
+test: ## Run tests and collect coverage data
 	uv run coverage run -m pytest
+	@uv run coverage report
 
 .PHONY: all
 all: format typecheck test ## run format, typecheck and test
