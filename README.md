@@ -47,7 +47,15 @@ where:
 - `warmup` will run a minimal Python script to download and cache the Python standard library. This is also useful to
   check the server is running correctly.
 
-Here's an example of using `mcp-run-python` with Pydantic AI:
+## Usage in codes
+
+```bash
+pip install mcp-run-python
+# or
+uv add mcp-run-python
+```
+
+Then you can use `mcp-run-python` with Pydantic AI:
 
 ```python
 from pydantic_ai import Agent
