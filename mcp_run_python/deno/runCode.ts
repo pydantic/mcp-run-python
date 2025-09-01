@@ -10,6 +10,7 @@ export interface CodeFile {
 }
 
 export async function runCode(
+  dependencies: string[],
   files: CodeFile[],
   log: (level: LoggingLevel, data: string) => void,
 ): Promise<RunSuccess | RunError> {
@@ -56,8 +57,7 @@ export async function runCode(
 
   const preparePyEnv: PreparePyEnv = pyodide.pyimport(moduleName)
 
-  const prepareStatus = await preparePyEnv.prepare_env(pyodide.toPy(files))
-
+  const prepareStatus = await preparePyEnv.prepare_env(pyodide.toPy(dependencies))
   let runResult: RunSuccess | RunError
   if (prepareStatus.kind == 'error') {
     runResult = {
@@ -66,25 +66,30 @@ export async function runCode(
       error: prepareStatus.message,
     }
   } else {
-    const { dependencies } = prepareStatus
-    const activeFile = files.find((f) => f.active)! || files[0]
-    try {
-      const rawValue = await pyodide.runPythonAsync(activeFile.content, {
-        globals: pyodide.toPy({ __name__: '__main__' }),
-        filename: activeFile.name,
-      })
+    const activeFile = files.find((f) => f.active) || files[0]
+    if (activeFile) {
+      try {
+        const rawValue = await pyodide.runPythonAsync(activeFile.content, {
+          globals: pyodide.toPy({ __name__: '__main__' }),
+          filename: activeFile.name,
+        })
+        runResult = {
+          status: 'success',
+          output,
+          returnValueJson: preparePyEnv.dump_json(rawValue),
+        }
+      } catch (err) {
+        runResult = {
+          status: 'run-error',
+          output,
+          error: formatError(err),
+        }
+      }
+    } else {
       runResult = {
         status: 'success',
-        dependencies,
         output,
-        returnValueJson: preparePyEnv.dump_json(rawValue),
-      }
-    } catch (err) {
-      runResult = {
-        status: 'run-error',
-        dependencies,
-        output,
-        error: formatError(err),
+        returnValueJson: 'null',
       }
     }
   }
@@ -98,24 +103,17 @@ interface RunSuccess {
   status: 'success'
   // we could record stdout and stderr separately, but I suspect simplicity is more important
   output: string[]
-  dependencies: string[]
   returnValueJson: string | null
 }
 
 interface RunError {
   status: 'install-error' | 'run-error'
   output: string[]
-  dependencies?: string[]
   error: string
 }
 
 export function asXml(runResult: RunSuccess | RunError): string {
   const xml = [`<status>${runResult.status}</status>`]
-  if (runResult.dependencies?.length) {
-    xml.push(
-      `<dependencies>${JSON.stringify(runResult.dependencies)}</dependencies>`,
-    )
-  }
   if (runResult.output.length) {
     xml.push('<output>')
     const escapeXml = escapeClosing('output')
@@ -158,7 +156,7 @@ function formatError(err: any): string {
 
 interface PrepareSuccess {
   kind: 'success'
-  dependencies: string[]
+  dependencies?: string[]
 }
 interface PrepareError {
   kind: 'error'

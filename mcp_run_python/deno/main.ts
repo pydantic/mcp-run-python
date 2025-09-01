@@ -18,35 +18,47 @@ const VERSION = '0.0.13'
 
 export async function main() {
   const { args } = Deno
-  if (args.length === 1 && args[0] === 'stdio') {
-    await runStdio()
-  } else if (args.length >= 1 && args[0] === 'streamable_http') {
-    const flags = parseArgs(Deno.args, {
-      string: ['port'],
-      default: { port: '3001' },
-    })
-    const port = parseInt(flags.port)
-    runStreamableHttp(port)
-  } else if (args.length === 1 && args[0] === 'warmup') {
-    await warmup()
-  } else {
-    console.error(
-      `\
-Invalid arguments.
+  const flags = parseArgs(Deno.args, {
+    string: ['deps'],
+  })
+  const deps = flags.deps?.split(',') ?? []
+  if (args.length >= 1) {
+    if (args[0] === 'stdio') {
+      await runStdio(deps)
+      return
+    } else if (args[0] === 'streamable_http') {
+      const flags = parseArgs(Deno.args, {
+        string: ['port'],
+        default: { port: '3001' },
+      })
+      const port = parseInt(flags.port)
+      runStreamableHttp(port, deps)
+      return
+    } else if (args[0] === 'example') {
+      await example(deps)
+      return
+    } else if (args[0] === 'noop') {
+      await installDeps(deps)
+      return
+    }
+  }
+  console.error(
+    `\
+Invalid arguments: ${args.join(' ')}
 
-Usage: deno task run [stdio|streamable_http|warmup]
+Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|noop]
 
 options:
-  --port <port>  Port to run the HTTP server on (default: 3001)`,
-    )
-    Deno.exit(1)
-  }
+--port <port>  Port to run the HTTP server on (default: 3001)
+--deps <deps>  Comma separated list of dependencies to install`,
+  )
+  Deno.exit(1)
 }
 
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(): McpServer {
+function createServer(deps: string[]): McpServer {
   const server = new McpServer(
     {
       name: 'MCP Run Python',
@@ -88,15 +100,19 @@ print('python code here')
     { python_code: z.string().describe('Python code to run') },
     async ({ python_code }: { python_code: string }) => {
       const logPromises: Promise<void>[] = []
-      const result = await runCode([{
-        name: 'main.py',
-        content: python_code,
-        active: true,
-      }], (level, data) => {
-        if (LogLevels.indexOf(level) >= LogLevels.indexOf(setLogLevel)) {
-          logPromises.push(server.server.sendLoggingMessage({ level, data }))
-        }
-      })
+      const result = await runCode(
+        deps,
+        [{
+          name: 'main.py',
+          content: python_code,
+          active: true,
+        }],
+        (level, data) => {
+          if (LogLevels.indexOf(level) >= LogLevels.indexOf(setLogLevel)) {
+            logPromises.push(server.server.sendLoggingMessage({ level, data }))
+          }
+        },
+      )
       await Promise.all(logPromises)
       return {
         content: [{ type: 'text', text: asXml(result) }],
@@ -154,9 +170,9 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number) {
+function runStreamableHttp(port: number, deps: string[]) {
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
-  const mcpServer = createServer()
+  const mcpServer = createServer(deps)
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
   const server = http.createServer(async (req, res) => {
@@ -241,18 +257,35 @@ function runStreamableHttp(port: number) {
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio() {
-  const mcpServer = createServer()
+async function runStdio(deps: string[]) {
+  const mcpServer = createServer(deps)
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }
 
 /*
- * Run pyodide to download packages which can otherwise interrupt the server
+ * Run pyodide to download and install dependencies.
  */
-async function warmup() {
+async function installDeps(deps: string[]) {
+  const result = await runCode(
+    deps,
+    [],
+    (level, data) =>
+      // use warn to avoid recursion since console.log is patched in runCode
+      console.error(`${level}: ${data}`),
+  )
+  if (result.status !== 'success') {
+    console.error('Failed to install dependencies')
+    Deno.exit(1)
+  }
+}
+
+/*
+ * Run a short example script that requires numpy.
+ */
+async function example(deps: string[]) {
   console.error(
-    `Running warmup script for MCP Run Python version ${VERSION}...`,
+    `Running example script for MCP Run Python version ${VERSION}...`,
   )
   const code = `
 import numpy
@@ -260,16 +293,19 @@ a = numpy.array([1, 2, 3])
 print('numpy array:', a)
 a
 `
-  const result = await runCode([{
-    name: 'warmup.py',
-    content: code,
-    active: true,
-  }], (level, data) =>
-    // use warn to avoid recursion since console.log is patched in runCode
-    console.error(`${level}: ${data}`))
+  const result = await runCode(
+    deps,
+    [{
+      name: 'example.py',
+      content: code,
+      active: true,
+    }],
+    (level, data) =>
+      // use warn to avoid recursion since console.log is patched in runCode
+      console.error(`${level}: ${data}`),
+  )
   console.log('Tool return value:')
   console.log(asXml(result))
-  console.log('\nwarmup successful 🎉')
 }
 
 // list of log levels to use for level comparison

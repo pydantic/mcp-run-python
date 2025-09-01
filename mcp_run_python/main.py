@@ -1,30 +1,58 @@
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Literal
 
-Mode = Literal['stdio', 'streamable_http', 'warmup']
+Mode = Literal['stdio', 'streamable_http', 'example']
 THIS_DIR = Path(__file__).parent
+NODE_MODULES = THIS_DIR / 'node_modules'
 
 
-def run_deno_server(mode: Mode, *, port: int | None = None):
+def deno_install_deps(deps: list[str] | None = None):
+    if NODE_MODULES.exists():
+        print('Deleting existing dependencies in node_modules...', file=sys.stderr)
+        shutil.rmtree(NODE_MODULES)
+
+    if deps:
+        print(f'Installing dependencies {deps}...', file=sys.stderr)
+        subprocess.run(('deno', *deno_install_args(deps)), cwd=THIS_DIR)
+
+
+def deno_run_server(mode: Mode, *, port: int | None = None, deps: list[str] | None = None):
+    deno_install_deps(deps)
     print('Running mcp-run-python server...', file=sys.stderr)
     try:
-        subprocess.run(('deno', *deno_args(mode, port=port)), cwd=THIS_DIR)
+        subprocess.run(('deno', *deno_run_args(mode, port=port, deps=deps)), cwd=THIS_DIR)
     except KeyboardInterrupt:
         print('Server stopped.', file=sys.stderr)
 
 
-def deno_args(mode: Mode, *, port: int | None = None) -> list[str]:
+def deno_install_args(deps: list[str]) -> list[str]:
     args = [
         'run',
         '-N',
-        f'-R={THIS_DIR / "node_modules"}',
-        f'-W={THIS_DIR / "node_modules"}',
+        f'-R={NODE_MODULES}',
+        f'-W={NODE_MODULES}',
+        '--node-modules-dir=auto',
+        str(THIS_DIR / 'deno/main.ts'),
+        'noop',
+        f'--deps={",".join(deps)}',
+    ]
+    return args
+
+
+def deno_run_args(mode: Mode, *, port: int | None = None, deps: list[str] | None = None) -> list[str]:
+    args = [
+        'run',
+        '-N',
+        f'-R={NODE_MODULES}',
         '--node-modules-dir=auto',
         str(THIS_DIR / 'deno/main.ts'),
         mode,
     ]
+    if deps is not None:
+        args.append(f'--deps={",".join(deps)}')
     if port is not None:
         if mode == 'streamable_http':
             args.append(f'--port={port}')

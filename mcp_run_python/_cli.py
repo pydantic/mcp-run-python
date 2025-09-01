@@ -5,7 +5,7 @@ import sys
 from collections.abc import Sequence
 
 from . import __version__
-from .main import run_deno_server
+from .main import deno_run_server
 
 
 def cli() -> int:  # pragma: no cover
@@ -22,9 +22,10 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     parser.add_argument('--version', action='store_true', help='Show version and exit')
 
     parser.add_argument('--port', type=int, help='Port to run the server on, default 3001.')
+    parser.add_argument('--deps', help='Comma separated list of dependencies to install')
     parser.add_argument(
         'mode',
-        choices=['stdio', 'streamable-http', 'warmup'],
+        choices=['stdio', 'streamable-http', 'example'],
         help='Mode to run the server in.',
     )
 
@@ -33,5 +34,5 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         print(f'mcp-run-python {__version__}')
         return 0
     else:
-        run_deno_server(args.mode.replace('-', '_'), port=args.port)
+        deno_run_server(args.mode.replace('-', '_'), port=args.port, deps=args.deps.split(','))
         return 0

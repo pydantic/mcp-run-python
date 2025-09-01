@@ -3,9 +3,10 @@ from __future__ import annotations as _annotations
 import asyncio
 import re
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncContextManager
 
 import pytest
 from httpx import AsyncClient, HTTPError
@@ -14,7 +15,7 @@ from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from mcp_run_python import deno_args
+from mcp_run_python import deno_run_args
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -27,56 +28,65 @@ def anyio_backend():
     return 'asyncio'
 
 
-@pytest.fixture(name='mcp_session', params=['stdio', 'streamable_http'])
-async def fixture_mcp_session(request: pytest.FixtureRequest) -> AsyncIterator[ClientSession]:
-    if request.param == 'stdio':
-        server_params = StdioServerParameters(command='deno', args=deno_args('stdio'))
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                yield session
-    elif request.param == 'streamable_http':
-        port = 3101
-        p = subprocess.Popen(['deno', *deno_args('streamable_http', port=3101)])
-        try:
-            url = f'http://localhost:{port}/mcp'
-
-            async with AsyncClient() as client:
-                for _ in range(10):
-                    try:
-                        await client.get(url, timeout=0.01)
-                    except HTTPError:
-                        await asyncio.sleep(0.1)
-                    else:
-                        break
-
-            async with streamablehttp_client(url) as (read_stream, write_stream, _):
-                async with ClientSession(read_stream, write_stream) as session:
+@pytest.fixture(name='run_mcp_session', params=['stdio', 'streamable_http'])
+def fixture_run_mcp_session(
+    request: pytest.FixtureRequest,
+) -> Callable[[list[str]], AsyncContextManager[ClientSession]]:
+    @asynccontextmanager
+    async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
+        if request.param == 'stdio':
+            server_params = StdioServerParameters(command='deno', args=deno_run_args('stdio', deps=deps))
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
                     yield session
+        else:
+            assert request.param == 'streamable_http', request.param
+            port = 3101
+            p = subprocess.Popen(['deno', *deno_run_args('streamable_http', port=3101, deps=deps)])
+            try:
+                url = f'http://localhost:{port}/mcp'
 
-        finally:
-            p.terminate()
-            exit_code = p.wait()
-            if exit_code > 0:
-                pytest.fail(f'Process exited with code {exit_code}')
+                async with AsyncClient() as client:
+                    for _ in range(10):
+                        try:
+                            await client.get(url, timeout=0.01)
+                        except HTTPError:
+                            await asyncio.sleep(0.1)
+                        else:
+                            break
+
+                async with streamablehttp_client(url) as (read_stream, write_stream, _):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        yield session
+
+            finally:
+                p.terminate()
+                exit_code = p.wait()
+                if exit_code > 0:
+                    pytest.fail(f'Process exited with code {exit_code}')
+
+    return run_mcp
 
 
-async def test_list_tools(mcp_session: ClientSession) -> None:
-    await mcp_session.initialize()
-    tools = await mcp_session.list_tools()
-    assert len(tools.tools) == 1
-    tool = tools.tools[0]
-    assert tool.name == 'run_python_code'
-    assert tool.description
-    assert tool.description.startswith('Tool to execute Python code and return stdout, stderr, and return value.')
-    assert tool.inputSchema['properties'] == snapshot(
-        {'python_code': {'type': 'string', 'description': 'Python code to run'}}
-    )
+async def test_list_tools(run_mcp_session: Callable[[list[str]], AsyncContextManager[ClientSession]]) -> None:
+    async with run_mcp_session([]) as mcp_session:
+        await mcp_session.initialize()
+        tools = await mcp_session.list_tools()
+        assert len(tools.tools) == 1
+        tool = tools.tools[0]
+        assert tool.name == 'run_python_code'
+        assert tool.description
+        assert tool.description.startswith('Tool to execute Python code and return stdout, stderr, and return value.')
+        assert tool.inputSchema['properties'] == snapshot(
+            {'python_code': {'type': 'string', 'description': 'Python code to run'}}
+        )
 
 
 @pytest.mark.parametrize(
-    'code,expected_output',
+    'deps,code,expected_output',
     [
         pytest.param(
+            [],
             [
                 'x = 4',
                 "print(f'{x=}')",
@@ -94,13 +104,13 @@ x=4
             id='basic-code',
         ),
         pytest.param(
+            ['numpy'],
             [
                 'import numpy',
                 'numpy.array([1, 2, 3])',
             ],
             snapshot("""\
 <status>success</status>
-<dependencies>["numpy"]</dependencies>
 <return_value>
 [
   1,
@@ -112,10 +122,8 @@ x=4
             id='import-numpy',
         ),
         pytest.param(
+            ['pydantic', 'email-validator'],
             [
-                '# /// script',
-                '# dependencies = ["pydantic", "email-validator"]',
-                '# ///',
                 'import pydantic',
                 'class Model(pydantic.BaseModel):',
                 '    email: pydantic.EmailStr',
@@ -123,7 +131,6 @@ x=4
             ],
             snapshot("""\
 <status>success</status>
-<dependencies>["pydantic","email-validator"]</dependencies>
 <return_value>
 {
   "email": "hello@pydantic.dev"
@@ -133,6 +140,7 @@ x=4
             id='magic-comment-import',
         ),
         pytest.param(
+            [],
             [
                 'print(unknown)',
             ],
@@ -151,13 +159,19 @@ NameError: name 'unknown' is not defined
         ),
     ],
 )
-async def test_run_python_code(mcp_session: ClientSession, code: list[str], expected_output: str) -> None:
-    await mcp_session.initialize()
-    result = await mcp_session.call_tool('run_python_code', {'python_code': '\n'.join(code)})
-    assert len(result.content) == 1
-    content = result.content[0]
-    assert isinstance(content, types.TextContent)
-    assert content.text == expected_output
+async def test_run_python_code(
+    run_mcp_session: Callable[[list[str]], AsyncContextManager[ClientSession]],
+    deps: list[str],
+    code: list[str],
+    expected_output: str,
+) -> None:
+    async with run_mcp_session(deps) as mcp_session:
+        await mcp_session.initialize()
+        result = await mcp_session.call_tool('run_python_code', {'python_code': '\n'.join(code)})
+        assert len(result.content) == 1
+        content = result.content[0]
+        assert isinstance(content, types.TextContent)
+        assert content.text == expected_output
 
 
 async def test_install_run_python_code() -> None:
@@ -171,7 +185,7 @@ async def test_install_run_python_code() -> None:
     async def logging_callback(params: types.LoggingMessageNotificationParams) -> None:
         logs.append(f'{params.level}: {params.data}')
 
-    server_params = StdioServerParameters(command='deno', args=deno_args('stdio'))
+    server_params = StdioServerParameters(command='deno', args=deno_run_args('stdio', deps=['numpy']))
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write, logging_callback=logging_callback) as mcp_session:
             await mcp_session.initialize()
@@ -184,7 +198,6 @@ async def test_install_run_python_code() -> None:
             assert isinstance(content, types.TextContent)
             expected_output = """\
 <status>success</status>
-<dependencies>["numpy"]</dependencies>
 <return_value>
 [
   1,
