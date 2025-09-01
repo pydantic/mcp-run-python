@@ -46,7 +46,7 @@ lint-py: ## Lint Python code
 lint:  lint-ts lint-py ## Lint all code
 
 .PHONY: typecheck-ts
-typecheck-ts: ## Typecheck TS code
+typecheck-ts: build ## Typecheck TS code
 	cd mcp_run_python && deno task typecheck
 
 .PHONY: typecheck-py
@@ -57,7 +57,7 @@ typecheck-py: ## Typecheck the code
 typecheck: typecheck-ts typecheck-py ## Typecheck all code
 
 .PHONY: test
-test: ## Run tests and collect coverage data
+test: build ## Run tests and collect coverage data
 	uv run coverage run -m pytest
 	@uv run coverage report
 

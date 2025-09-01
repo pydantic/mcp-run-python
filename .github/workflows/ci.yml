@@ -27,8 +27,6 @@ jobs:
         with:
           deno-version: v2.x
 
-      - run: make build
-
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
@@ -110,6 +108,7 @@ jobs:
         with:
           version_file_path: packages/python/pyproject.toml
 
+      - run: make build
       - run: uv build
 
       - run: uv publish --trusted-publishing always
