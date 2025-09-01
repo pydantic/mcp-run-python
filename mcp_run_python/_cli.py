@@ -21,7 +21,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     )
     parser.add_argument('--version', action='store_true', help='Show version and exit')
 
-    parser.add_argument('--port', type=int, help='Port to run the server on.')
+    parser.add_argument('--port', type=int, help='Port to run the server on, default 3001.')
     parser.add_argument(
         'mode',
         choices=['stdio', 'streamable-http', 'warmup'],

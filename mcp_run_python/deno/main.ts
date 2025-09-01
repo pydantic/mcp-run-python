@@ -4,7 +4,6 @@ import './polyfill.ts'
 import http from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { parseArgs } from '@std/cli/parse-args'
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
@@ -28,13 +27,6 @@ export async function main() {
     })
     const port = parseInt(flags.port)
     runStreamableHttp(port)
-  } else if (args.length >= 1 && args[0] === 'sse') {
-    const flags = parseArgs(Deno.args, {
-      string: ['port'],
-      default: { port: '3001' },
-    })
-    const port = parseInt(flags.port)
-    runSse(port)
   } else if (args.length === 1 && args[0] === 'warmup') {
     await warmup()
   } else {
@@ -42,10 +34,10 @@ export async function main() {
       `\
 Invalid arguments.
 
-Usage: deno task run [stdio|streamable_http|sse|warmup]
+Usage: deno task run [stdio|streamable_http|warmup]
 
 options:
-  --port <port>  Port to run the SSE server on (default: 3001)`,
+  --port <port>  Port to run the HTTP server on (default: 3001)`,
     )
     Deno.exit(1)
   }
@@ -115,7 +107,7 @@ print('python code here')
 }
 
 /*
- * Define some QOL functions for both the SSE and Streamable HTTP server implementation
+ * Define some QOL functions for both the Streamable HTTP server implementation
  */
 function httpGetUrl(req: http.IncomingMessage): URL {
   return new URL(
@@ -227,7 +219,7 @@ function runStreamableHttp(port: number) {
       // Handle the request
       await transport.handleRequest(req, res, body)
     } else if (match('GET', '/mcp')) {
-      // Handle server-to-client notifications via SSE
+      // Handle server-to-client notifications
       await handleSessionRequest()
     } else if (match('DELETE', '/mcp')) {
       // Handle requests for session termination
@@ -242,53 +234,6 @@ function runStreamableHttp(port: number) {
   server.listen(port, () => {
     console.log(
       `Running MCP Run Python version ${VERSION} with Streamable HTTP transport on port ${port}`,
-    )
-  })
-}
-
-/*
- * Run the MCP server using the SSE transport, e.g. over HTTP.
- */
-function runSse(port: number) {
-  const mcpServer = createServer()
-  const transports: { [sessionId: string]: SSEServerTransport } = {}
-
-  const server = http.createServer(async (req, res) => {
-    const url = httpGetUrl(req)
-    let pathMatch = false
-    function match(method: string, path: string): boolean {
-      if (url.pathname === path) {
-        pathMatch = true
-        return req.method === method
-      }
-      return false
-    }
-
-    if (match('GET', '/sse')) {
-      const transport = new SSEServerTransport('/messages', res)
-      transports[transport.sessionId] = transport
-      res.on('close', () => {
-        delete transports[transport.sessionId]
-      })
-      await mcpServer.connect(transport)
-    } else if (match('POST', '/messages')) {
-      const sessionId = url.searchParams.get('sessionId') ?? ''
-      const transport = transports[sessionId]
-      if (transport) {
-        await transport.handlePostMessage(req, res)
-      } else {
-        httpSetTextResponse(res, 400, `No transport found for sessionId '${sessionId}'`)
-      }
-    } else if (pathMatch) {
-      httpSetTextResponse(res, 405, 'Method not allowed')
-    } else {
-      httpSetTextResponse(res, 404, 'Page not found')
-    }
-  })
-
-  server.listen(port, () => {
-    console.log(
-      `Running MCP Run Python version ${VERSION} with SSE transport on port ${port}`,
     )
   })
 }
