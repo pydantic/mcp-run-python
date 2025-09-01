@@ -1,0 +1,16 @@
+node_modules/
+.venv
+dist
+__pycache__
+.env
+/scratch/
+/.coverage
+env*/
+.DS_Store
+.cache/
+.vscode/
+**.idea/
+.coverage*
+/test_tmp/
+
+/mcp_run_python/deno/prepareEnvCode.ts

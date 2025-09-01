@@ -1,0 +1,70 @@
+[project]
+name = "mcp-run-python"
+version = "0.0.1"
+authors = [{ name = "Samuel Colvin", email = "samuel@pydantic.dev" }]
+license = "MIT"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Unix",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console",
+    "Environment :: MacOS X",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet",
+]
+requires-python = ">=3.10"
+dependencies = ["mcp>=1.13.1"]
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.31.3",
+    "dirty-equals>=0.9.0",
+    "httpx>=0.28.1",
+    "inline-snapshot>=0.19.3",
+    "micropip>=0.9.0; python_version >= '3.12'",
+    "pytest>=8.3.3",
+    "pytest-pretty>=1.2.0",
+    "ruff>=0.12.11",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+extend-select = ["Q", "RUF100", "C90", "UP", "I"]
+flake8-quotes = { inline-quotes = "single", multiline-quotes = "double" }
+isort = { combine-as-imports = true }
+mccabe = { max-complexity = 18 }
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.basedpyright]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = true
+reportIgnoreCommentWithoutRule = true
+reportUnusedParameter = true
+reportIncompatibleUnannotatedOverride = true
+reportImplicitAbstractClass = true
+reportMissingTypeStubs = false
+reportMissingModuleSource = false
+include = ["build", "mcp_run_python"]
+extraPaths = ["build/stubs"]
+venv = ".venv"
