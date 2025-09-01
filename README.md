@@ -1,13 +1,33 @@
-# MCP Run Python
+<div align="center">
+  <h1>MCP Run Python</h1>
+</div>
+<div align="center">
+  <a href="https://github.com/pydantic/mcp-run-python/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/pydantic/mcp-run-python/actions/workflows/ci.yml/badge.svg?event=push" alt="CI"></a>
+  <a href="https://pypi.python.org/pypi/mcp-run-python"><img src="https://img.shields.io/pypi/v/mcp-run-python.svg" alt="PyPI"></a>
+  <a href="https://github.com/pydantic/mcp-run-python"><img src="https://img.shields.io/pypi/pyversions/mcp-run-python.svg" alt="versions"></a>
+  <a href="https://github.com/pydantic/mcp-run-python/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pydantic/mcp-run-python.svg" alt="license"></a>
+  <a href="https://logfire.pydantic.dev/docs/join-slack/"><img src="https://img.shields.io/badge/Slack-Join%20Slack-4A154B?logo=slack" alt="Join Slack" /></a>
+</div>
+<br/>
+<div align="center">
+  MCP server to run Python code in a sandbox.
+</div>
+<br/>
 
-[Model Context Protocol](https://modelcontextprotocol.io/) server to run Python code in a sandbox.
-
-The code is executed using [Pyodide](https://pyodide.org) in [Deno](https://deno.com/) and is therefore isolated from
+Code is executed using [Pyodide](https://pyodide.org) in [Deno](https://deno.com/) and is therefore isolated from
 the rest of the operating system.
 
-**See <https://ai.pydantic.dev/mcp/run-python/> for complete documentation.**
+## Features
 
-To use this server, you must have both Python and [Deno](https://deno.com/) installed
+- **Secure Execution**: Run Python code in a sandboxed WebAssembly environment
+- **Package Management**: Automatically detects and installs required dependencies
+- **Complete Results**: Captures standard output, standard error, and return values
+- **Asynchronous Support**: Runs async code properly
+- **Error Handling**: Provides detailed error reports for debugging
+
+## Usage
+
+To use this server, you must have both Python and [Deno](https://deno.com/) installed.
 
 The server can be run with `deno` installed using `uvx`:
 
@@ -54,3 +74,11 @@ if __name__ == '__main__':
     import asyncio
     asyncio.run(main())
 ```
+
+## Logging
+
+MCP Run Python supports emitting stdout and stderr from the python execution as [MCP logging messages](https://github.com/modelcontextprotocol/specification/blob/eb4abdf2bb91e0d5afd94510741eadd416982350/docs/specification/draft/server/utilities/logging.md?plain=1).
+
+For logs to be emitted you must set the logging level when connecting to the server. By default, the log level is set to the highest level, `emergency`.
+
+Currently, it's not possible to demonstrate this due to a bug in the Python MCP Client, see [modelcontextprotocol/python-sdk#201](https://github.com/modelcontextprotocol/python-sdk/issues/201#issuecomment-2727663121).

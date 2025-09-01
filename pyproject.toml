@@ -4,6 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "mcp-run-python"
+description = "Model Context Protocol server to run Python code in a sandbox."
 version = "0.0.1"
 authors = [{ name = "Samuel Colvin", email = "samuel@pydantic.dev" }]
 license = "MIT"

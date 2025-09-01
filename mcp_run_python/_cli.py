@@ -21,10 +21,11 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     )
     parser.add_argument('--version', action='store_true', help='Show version and exit')
 
+    parser.add_argument('--port', type=int, help='Port to run the server on.')
     parser.add_argument(
         'mode',
-        choices=['stdio', 'streamable-http', 'http', 'warmup'],
-        help='Mode to run in ("http" is an alias for "streamable-http")',
+        choices=['stdio', 'streamable-http', 'warmup'],
+        help='Mode to run the server in.',
     )
 
     args = parser.parse_args(args_list)
@@ -32,5 +33,5 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         print(f'mcp-run-python {__version__}')
         return 0
     else:
-        run_deno_server(args.mode.replace('-', '_'))
+        run_deno_server(args.mode.replace('-', '_'), port=args.port)
         return 0

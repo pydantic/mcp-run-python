@@ -26,5 +26,8 @@ def deno_args(mode: Mode, *, port: int | None = None) -> list[str]:
         mode,
     ]
     if port is not None:
-        args.append(f'--port={port}')
+        if mode == 'streamable_http':
+            args.append(f'--port={port}')
+        else:
+            raise ValueError('Port is only supported for `streamable_http` mode')
     return args
