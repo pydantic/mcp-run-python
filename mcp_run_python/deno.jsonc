@@ -6,7 +6,7 @@
     ".": "./deno/main.ts"
   },
   "tasks": {
-    "run": "deno run -N -R=node_modules -W=node_modules deno/main.ts",
+    "dev": "deno run -N -R=node_modules -W=node_modules deno/main.ts",
     "lint": "deno lint",
     "typecheck": "deno check deno",
     "format": "deno fmt"

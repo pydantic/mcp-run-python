@@ -56,12 +56,9 @@ typecheck-py: ## Typecheck the code
 .PHONY: typecheck
 typecheck: typecheck-ts typecheck-py ## Typecheck all code
 
-.PHONY: test-ts
-test-ts: ## Run TS tests
-	CI=1 npm run test
-
 .PHONY: test
-test: test-ts ## Run all tests
+test: ## Run tests
+	uv run coverage run -m pytest
 
 .PHONY: all
 all: format typecheck test ## run format, typecheck and test

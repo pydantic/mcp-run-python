@@ -11,22 +11,15 @@ import pytest
 from httpx import AsyncClient, HTTPError
 from inline_snapshot import snapshot
 from mcp import ClientSession, StdioServerParameters, types
-from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
+
+from mcp_run_python import deno_args
 
 if TYPE_CHECKING:
     from mcp import ClientSession
 
 pytestmark = pytest.mark.anyio
-DENO_ARGS = [
-    'run',
-    '-N',
-    '-R=mcp-run-python/node_modules',
-    '-W=mcp-run-python/node_modules',
-    '--node-modules-dir=auto',
-    'mcp-run-python/src/main.ts',
-]
 
 
 @pytest.fixture
@@ -34,16 +27,16 @@ def anyio_backend():
     return 'asyncio'
 
 
-@pytest.fixture(name='mcp_session', params=['stdio', 'sse', 'streamable_http'])
+@pytest.fixture(name='mcp_session', params=['stdio', 'streamable_http'])
 async def fixture_mcp_session(request: pytest.FixtureRequest) -> AsyncIterator[ClientSession]:
     if request.param == 'stdio':
-        server_params = StdioServerParameters(command='deno', args=[*DENO_ARGS, 'stdio'])
+        server_params = StdioServerParameters(command='deno', args=deno_args('stdio'))
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 yield session
     elif request.param == 'streamable_http':
         port = 3101
-        p = subprocess.Popen(['deno', *DENO_ARGS, 'streamable_http', f'--port={port}'])
+        p = subprocess.Popen(['deno', *deno_args('streamable_http', port=3101)])
         try:
             url = f'http://localhost:{port}/mcp'
 
@@ -60,30 +53,6 @@ async def fixture_mcp_session(request: pytest.FixtureRequest) -> AsyncIterator[C
                 async with ClientSession(read_stream, write_stream) as session:
                     yield session
 
-        finally:
-            p.terminate()
-            exit_code = p.wait()
-            if exit_code > 0:
-                pytest.fail(f'Process exited with code {exit_code}')
-
-    else:
-        port = 3101
-
-        p = subprocess.Popen(['deno', *DENO_ARGS, 'sse', f'--port={port}'])
-        try:
-            url = f'http://localhost:{port}'
-            async with AsyncClient() as client:
-                for _ in range(10):
-                    try:
-                        await client.get(url, timeout=0.01)
-                    except HTTPError:
-                        await asyncio.sleep(0.1)
-                    else:
-                        break
-
-            async with sse_client(f'{url}/sse') as (read, write):
-                async with ClientSession(read, write) as session:
-                    yield session
         finally:
             p.terminate()
             exit_code = p.wait()
@@ -192,7 +161,7 @@ async def test_run_python_code(mcp_session: ClientSession, code: list[str], expe
 
 
 async def test_install_run_python_code() -> None:
-    node_modules = Path(__file__).parent / 'node_modules'
+    node_modules = Path(__file__).parent.parent / 'mcp_run_python/node_modules'
     if node_modules.exists():
         # shutil.rmtree can't delete node_modules :-(
         subprocess.run(['rm', '-r', node_modules], check=True)
@@ -202,7 +171,7 @@ async def test_install_run_python_code() -> None:
     async def logging_callback(params: types.LoggingMessageNotificationParams) -> None:
         logs.append(f'{params.level}: {params.data}')
 
-    server_params = StdioServerParameters(command='deno', args=[*DENO_ARGS, 'stdio'])
+    server_params = StdioServerParameters(command='deno', args=deno_args('stdio'))
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write, logging_callback=logging_callback) as mcp_session:
             await mcp_session.initialize()

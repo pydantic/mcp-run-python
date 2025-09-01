@@ -1,3 +1,7 @@
+[build-system]
+requires = ["uv_build>=0.8.10"]
+build-backend = "uv_build"
+
 [project]
 name = "mcp-run-python"
 version = "0.0.1"
@@ -25,7 +29,16 @@ classifiers = [
     "Topic :: Internet",
 ]
 requires-python = ">=3.10"
-dependencies = ["mcp>=1.13.1"]
+
+[project.urls]
+Homepage = "https://github.com/pydantic/mcp-run-python"
+Source = "https://github.com/pydantic/mcp-run-python"
+Changelog = "https://github.com/pydantic/mcp-run-python/releases"
+
+[tool.uv.build-backend]
+module-name = "mcp_run_python"
+module-root = ""
+
 
 [dependency-groups]
 dev = [
@@ -34,10 +47,14 @@ dev = [
     "httpx>=0.28.1",
     "inline-snapshot>=0.19.3",
     "micropip>=0.9.0; python_version >= '3.12'",
+    "mcp>=1.13.1",
     "pytest>=8.3.3",
     "pytest-pretty>=1.2.0",
     "ruff>=0.12.11",
 ]
+
+[project.scripts]
+mcp-run-python = "mcp_run_python._cli:cli"
 
 [tool.ruff]
 line-length = 120
