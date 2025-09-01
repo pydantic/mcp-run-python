@@ -90,9 +90,6 @@ def _add_extra_dependencies(dependencies: list[str]) -> list[str]:
         elif d.startswith(('fastapi', 'httpx', 'pydantic_ai')):
             extras.append('ssl')
 
-        if d == 'pydantic' or d.startswith('pydantic['):
-            extras.append('idna')
-
         if d.startswith('pydantic_ai'):
             extras.append('typing_extensions>=4.12')
 

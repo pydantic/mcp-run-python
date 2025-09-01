@@ -77,14 +77,6 @@ function createServer(deps: string[]): McpServer {
 The code may be async, and the value on the last line will be returned as the return value.
 
 The code will be executed with Python 3.12.
-
-Dependencies may be defined via PEP 723 script metadata, e.g. to install "pydantic", the script should start
-with a comment of the form:
-
-# /// script
-# dependencies = ['pydantic']
-# ///
-print('python code here')
 `
 
   let setLogLevel: LoggingLevel = 'emergency'
