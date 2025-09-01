@@ -27,6 +27,8 @@ jobs:
         with:
           deno-version: v2.x
 
+      - run: make build
+
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
