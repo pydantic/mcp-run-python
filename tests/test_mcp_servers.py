@@ -5,7 +5,6 @@ import re
 import subprocess
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING, AsyncContextManager
 
 import pytest
@@ -15,7 +14,7 @@ from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from mcp_run_python import deno_run_args
+from mcp_run_python import deno_prepare_args
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -35,14 +34,14 @@ def fixture_run_mcp_session(
     @asynccontextmanager
     async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
         if request.param == 'stdio':
-            server_params = StdioServerParameters(command='deno', args=deno_run_args('stdio', deps=deps))
+            server_params = StdioServerParameters(command='deno', args=deno_prepare_args('stdio', deps=deps))
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     yield session
         else:
             assert request.param == 'streamable_http', request.param
             port = 3101
-            p = subprocess.Popen(['deno', *deno_run_args('streamable_http', port=3101, deps=deps)])
+            p = subprocess.Popen(['deno', *deno_prepare_args('streamable_http', port=3101, deps=deps)])
             try:
                 url = f'http://localhost:{port}/mcp'
 
@@ -175,19 +174,19 @@ async def test_run_python_code(
 
 
 async def test_install_run_python_code() -> None:
-    node_modules = Path(__file__).parent.parent / 'mcp_run_python/node_modules'
-    if node_modules.exists():
-        # shutil.rmtree can't delete node_modules :-(
-        subprocess.run(['rm', '-r', node_modules], check=True)
-
     logs: list[str] = []
 
-    async def logging_callback(params: types.LoggingMessageNotificationParams) -> None:
-        logs.append(f'{params.level}: {params.data}')
+    def logging_callback(log_output: str) -> None:
+        logs.append(log_output)
 
-    server_params = StdioServerParameters(command='deno', args=deno_run_args('stdio', deps=['numpy']))
+    args = deno_prepare_args('stdio', deps=['numpy'], install_log_handler=logging_callback)
+
+    assert len(logs) == 1
+    assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", logs[0])
+
+    server_params = StdioServerParameters(command='deno', args=args)
     async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write, logging_callback=logging_callback) as mcp_session:
+        async with ClientSession(read, write) as mcp_session:
             await mcp_session.initialize()
             await mcp_session.set_logging_level('debug')
             result = await mcp_session.call_tool(
@@ -207,7 +206,3 @@ async def test_install_run_python_code() -> None:
 </return_value>\
 """
             assert content.text == expected_output
-            assert len(logs) >= 18
-            assert re.search(
-                r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", '\n'.join(logs)
-            )

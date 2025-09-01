@@ -57,6 +57,7 @@ jobs:
       - run: make test
         env:
           COVERAGE_FILE: coverage/.coverage.py${{ matrix.python-version }}
+      - run: uv run mcp-run-python --deps numpy example
       - name: store coverage files
         uses: actions/upload-artifact@v4
         with:

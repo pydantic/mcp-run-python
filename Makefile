@@ -58,7 +58,7 @@ typecheck: typecheck-ts typecheck-py ## Typecheck all code
 
 .PHONY: test
 test: build ## Run tests and collect coverage data
-	uv run coverage run -m pytest
+	uv run coverage run -m pytest -v
 	@uv run coverage report
 
 .PHONY: all

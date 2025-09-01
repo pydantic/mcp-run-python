@@ -34,5 +34,6 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         print(f'mcp-run-python {__version__}')
         return 0
     else:
-        deno_run_server(args.mode.replace('-', '_'), port=args.port, deps=args.deps.split(','))
+        deps: list[str] = args.deps.split(',') if args.deps else []
+        deno_run_server(args.mode.replace('-', '_'), port=args.port, deps=deps, install_log_handler=print)
         return 0
