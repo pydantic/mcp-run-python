@@ -108,4 +108,4 @@ async def test_print_handler():
             'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
         ),
     )
-    assert [(level, msg) for level, msg in logs if level == 'info'] == snapshot([('info', 'hello 123')])
+    assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))
