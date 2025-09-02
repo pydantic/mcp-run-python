@@ -5,6 +5,9 @@
   "exports": {
     ".": "./deno/main.ts"
   },
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
   "tasks": {
     "dev": "deno run -N -R=node_modules -W=node_modules deno/main.ts",
     "lint": "deno lint",

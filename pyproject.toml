@@ -85,6 +85,5 @@ reportIncompatibleUnannotatedOverride = true
 reportImplicitAbstractClass = true
 reportMissingTypeStubs = false
 reportMissingModuleSource = false
-include = ["build", "mcp_run_python"]
-extraPaths = ["build/stubs"]
+include = ["build", "mcp_run_python", "tests"]
 venv = ".venv"

@@ -13,13 +13,13 @@ import logfire
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 
-from mcp_run_python import deno_args
+from mcp_run_python import deno_args_prepare
 
 logfire.configure()
 logfire.instrument_mcp()
 logfire.instrument_pydantic_ai()
 
-server = MCPServerStdio('deno', args=deno_args('stdio'))
+server = MCPServerStdio('deno', args=deno_args_prepare('stdio'))
 agent_with_python = Agent('claude-3-5-haiku-latest', toolsets=[server])
 
 
