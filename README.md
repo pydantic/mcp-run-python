@@ -60,7 +60,7 @@ Then you can use `mcp-run-python` with Pydantic AI:
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
-from mcp_run_python import deno_prepare_args
+from mcp_run_python import deno_args_prepare
 
 import logfire
 
@@ -68,7 +68,7 @@ logfire.configure()
 logfire.instrument_mcp()
 logfire.instrument_pydantic_ai()
 
-server = MCPServerStdio('deno', args=deno_prepare_args('stdio'))
+server = MCPServerStdio('deno', args=deno_args_prepare('stdio'))
 agent = Agent('claude-3-5-haiku-latest', toolsets=[server])
 
 
@@ -83,8 +83,8 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
-**Note**: `deno_prepare_args` can take `deps` as a keyword argument to install dependencies.
-As well as returning the args needed to run `mcp_run_python`, `deno_prepare_args` installs the dependencies
+**Note**: `deno_args_prepare` can take `deps` as a keyword argument to install dependencies.
+As well as returning the args needed to run `mcp_run_python`, `deno_args_prepare` installs the dependencies
 so they can be used by the server.
 
 ## Logging
@@ -111,7 +111,7 @@ Here's an example of manually running code with `mcp-run-python`:
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from mcp_run_python import deno_prepare_args
+from mcp_run_python import deno_args_prepare
 
 code = """
 import numpy
@@ -121,7 +121,7 @@ a
 """
 server_params = StdioServerParameters(
     command='deno',
-    args=deno_prepare_args('stdio', deps=['numpy'])
+    args=deno_args_prepare('stdio', deps=['numpy'])
 )
 
 

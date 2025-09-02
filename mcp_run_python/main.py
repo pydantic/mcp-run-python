@@ -21,11 +21,11 @@ def deno_run_server(
     print('Running mcp-run-python server...', file=sys.stderr)
     try:
         subprocess.run(('deno', *deno_run_args(mode, port=port, deps=deps)), cwd=THIS_DIR)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt:  # pragma: no cover
         print('Server stopped.', file=sys.stderr)
 
 
-def deno_prepare_args(
+def deno_args_prepare(
     mode: Mode,
     *,
     port: int | None = None,

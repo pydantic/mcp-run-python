@@ -79,7 +79,7 @@ jobs:
         with:
           enable-cache: true
       - run: uvx coverage combine coverage
-      - run: uvx coverage report --fail-under 90
+      - run: uvx coverage report --fail-under 95
 
   check:
     if: always()

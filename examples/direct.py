@@ -1,7 +1,7 @@
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from mcp_run_python import deno_prepare_args
+from mcp_run_python import deno_args_prepare
 
 code = """
 import numpy
@@ -9,7 +9,7 @@ a = numpy.array([1, 2, 3])
 print(a)
 a
 """
-server_params = StdioServerParameters(command='deno', args=deno_prepare_args('stdio', deps=['numpy']))
+server_params = StdioServerParameters(command='deno', args=deno_args_prepare('stdio', deps=['numpy']))
 
 
 async def main():

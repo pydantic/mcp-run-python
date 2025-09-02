@@ -14,7 +14,8 @@ from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from mcp_run_python import deno_prepare_args
+from mcp_run_python import deno_args_prepare
+from mcp_run_python._cli import cli
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -34,14 +35,14 @@ def fixture_run_mcp_session(
     @asynccontextmanager
     async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
         if request.param == 'stdio':
-            server_params = StdioServerParameters(command='deno', args=deno_prepare_args('stdio', deps=deps))
+            server_params = StdioServerParameters(command='deno', args=deno_args_prepare('stdio', deps=deps))
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     yield session
         else:
             assert request.param == 'streamable_http', request.param
             port = 3101
-            p = subprocess.Popen(['deno', *deno_prepare_args('streamable_http', port=3101, deps=deps)])
+            p = subprocess.Popen(['deno', *deno_args_prepare('streamable_http', port=3101, deps=deps)])
             try:
                 url = f'http://localhost:{port}/mcp'
 
@@ -179,7 +180,7 @@ async def test_install_run_python_code() -> None:
     def logging_callback(log_output: str) -> None:
         logs.append(log_output)
 
-    args = deno_prepare_args('stdio', deps=['numpy'], install_log_handler=logging_callback)
+    args = deno_args_prepare('stdio', deps=['numpy'], install_log_handler=logging_callback)
 
     assert len(logs) == 1
     assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", logs[0])
@@ -195,7 +196,9 @@ async def test_install_run_python_code() -> None:
             assert len(result.content) == 1
             content = result.content[0]
             assert isinstance(content, types.TextContent)
-            expected_output = """\
+            assert (
+                content.text
+                == """\
 <status>success</status>
 <return_value>
 [
@@ -205,4 +208,14 @@ async def test_install_run_python_code() -> None:
 ]
 </return_value>\
 """
-            assert content.text == expected_output
+            )
+
+
+def test_cli_version(capsys: pytest.CaptureFixture[str]):
+    cli(['--version'])
+    captured = capsys.readouterr()
+    assert captured.out.startswith('mcp-run-python ')
+
+
+def test_cli_example():
+    cli(['--deps', 'numpy', 'example'])
