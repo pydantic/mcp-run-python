@@ -6,12 +6,11 @@ import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
 export interface CodeFile {
   name: string
   content: string
-  active: boolean
 }
 
 export async function runCode(
   dependencies: string[],
-  files: CodeFile[],
+  file: CodeFile | undefined,
   log: (level: LoggingLevel, data: string) => void,
 ): Promise<RunSuccess | RunError> {
   // remove once we can upgrade to pyodide 0.27.7 and console.log is no longer used.
@@ -65,32 +64,29 @@ export async function runCode(
       output,
       error: prepareStatus.message,
     }
-  } else {
-    const activeFile = files.find((f) => f.active) || files[0]
-    if (activeFile) {
-      try {
-        const rawValue = await pyodide.runPythonAsync(activeFile.content, {
-          globals: pyodide.toPy({ __name__: '__main__' }),
-          filename: activeFile.name,
-        })
-        runResult = {
-          status: 'success',
-          output,
-          returnValueJson: preparePyEnv.dump_json(rawValue),
-        }
-      } catch (err) {
-        runResult = {
-          status: 'run-error',
-          output,
-          error: formatError(err),
-        }
-      }
-    } else {
+  } else if (file) {
+    try {
+      const rawValue = await pyodide.runPythonAsync(file.content, {
+        globals: pyodide.toPy({ __name__: '__main__' }),
+        filename: file.name,
+      })
       runResult = {
         status: 'success',
         output,
-        returnValueJson: 'null',
+        returnValueJson: preparePyEnv.dump_json(rawValue),
       }
+    } catch (err) {
+      runResult = {
+        status: 'run-error',
+        output,
+        error: formatError(err),
+      }
+    }
+  } else {
+    runResult = {
+      status: 'success',
+      output,
+      returnValueJson: null,
     }
   }
   sys.stdout.flush()

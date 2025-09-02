@@ -94,11 +94,7 @@ The code will be executed with Python 3.12.
       const logPromises: Promise<void>[] = []
       const result = await runCode(
         deps,
-        [{
-          name: 'main.py',
-          content: python_code,
-          active: true,
-        }],
+        { name: 'main.py', content: python_code },
         (level, data) => {
           if (LogLevels.indexOf(level) >= LogLevels.indexOf(setLogLevel)) {
             logPromises.push(server.server.sendLoggingMessage({ level, data }))
@@ -261,7 +257,7 @@ async function runStdio(deps: string[]) {
 async function installDeps(deps: string[]) {
   const result = await runCode(
     deps,
-    [],
+    undefined,
     (level, data) =>
       // use warn to avoid recursion since console.log is patched in runCode
       console.error(`${level}: ${data}`),
@@ -287,11 +283,7 @@ a
 `
   const result = await runCode(
     deps,
-    [{
-      name: 'example.py',
-      content: code,
-      active: true,
-    }],
+    { name: 'example.py', content: code },
     (level, data) =>
       // use warn to avoid recursion since console.log is patched in runCode
       console.error(`${level}: ${data}`),
