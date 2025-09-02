@@ -11,7 +11,7 @@ import { type LoggingLevel, SetLevelRequestSchema } from '@modelcontextprotocol/
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
-import { asXml, runCode } from './runCode.ts'
+import { asJson, asXml, runCode } from './runCode.ts'
 import { Buffer } from 'node:buffer'
 
 const VERSION = '0.0.13'
@@ -19,20 +19,17 @@ const VERSION = '0.0.13'
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
-    string: ['deps'],
+    string: ['deps', 'return-mode', 'port'],
+    default: { port: '3001', 'return-mode': 'xml' },
   })
   const deps = flags.deps?.split(',') ?? []
   if (args.length >= 1) {
     if (args[0] === 'stdio') {
-      await runStdio(deps)
+      await runStdio(deps, flags['return-mode'])
       return
     } else if (args[0] === 'streamable_http') {
-      const flags = parseArgs(Deno.args, {
-        string: ['port'],
-        default: { port: '3001' },
-      })
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps)
+      runStreamableHttp(port, deps, flags['return-mode'])
       return
     } else if (args[0] === 'example') {
       await example(deps)
@@ -49,8 +46,9 @@ Invalid arguments: ${args.join(' ')}
 Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|noop]
 
 options:
---port <port>  Port to run the HTTP server on (default: 3001)
---deps <deps>  Comma separated list of dependencies to install`,
+--port <port>             Port to run the HTTP server on (default: 3001)
+--deps <deps>             Comma separated list of dependencies to install
+--return-mode <xml/json>  Return mode for output data (default: xml)`,
   )
   Deno.exit(1)
 }
@@ -58,7 +56,7 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(deps: string[]): McpServer {
+function createServer(deps: string[], returnMode: string): McpServer {
   const server = new McpServer(
     {
       name: 'MCP Run Python',
@@ -103,7 +101,7 @@ The code will be executed with Python 3.12.
       )
       await Promise.all(logPromises)
       return {
-        content: [{ type: 'text', text: asXml(result) }],
+        content: [{ type: 'text', text: returnMode === 'xml' ? asXml(result) : asJson(result) }],
       }
     },
   )
@@ -158,9 +156,9 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[]) {
+function runStreamableHttp(port: number, deps: string[], returnMode: string) {
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
-  const mcpServer = createServer(deps)
+  const mcpServer = createServer(deps, returnMode)
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
   const server = http.createServer(async (req, res) => {
@@ -245,8 +243,8 @@ function runStreamableHttp(port: number, deps: string[]) {
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio(deps: string[]) {
-  const mcpServer = createServer(deps)
+async function runStdio(deps: string[], returnMode: string) {
+  const mcpServer = createServer(deps, returnMode)
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }

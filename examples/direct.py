@@ -21,7 +21,9 @@ async def main():
             print(repr(tools.tools[0].name))
             print(repr(tools.tools[0].inputSchema))
             result = await session.call_tool('run_python_code', {'python_code': code})
-            print(result.content[0].text)
+            content_block = result.content[0]
+            assert content_block.type == 'text'
+            print(content_block.text)
 
 
 if __name__ == '__main__':

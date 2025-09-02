@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "mcp-run-python"
 description = "Model Context Protocol server to run Python code in a sandbox."
-version = "0.0.1"
+version = "0.0.2"
 authors = [{ name = "Samuel Colvin", email = "samuel@pydantic.dev" }]
 license = "MIT"
 readme = "README.md"
@@ -30,6 +30,7 @@ classifiers = [
     "Topic :: Internet",
 ]
 requires-python = ">=3.10"
+dependencies = ["mcp>=1.13.1"]
 
 [project.urls]
 Homepage = "https://github.com/pydantic/mcp-run-python"
@@ -49,11 +50,11 @@ dev = [
     "httpx>=0.28.1",
     "inline-snapshot>=0.19.3",
     "micropip>=0.9.0; python_version >= '3.12'",
-    "mcp>=1.13.1",
     "pytest>=8.3.3",
     "pytest-pretty>=1.2.0",
     "ruff>=0.12.11",
     "coverage>=7.10.6",
+    "pydantic-ai-slim[anthropic,mcp]>=0.8.1",
 ]
 
 [project.scripts]
@@ -85,5 +86,5 @@ reportIncompatibleUnannotatedOverride = true
 reportImplicitAbstractClass = true
 reportMissingTypeStubs = false
 reportMissingModuleSource = false
-include = ["build", "mcp_run_python", "tests"]
+include = ["build", "mcp_run_python", "tests", "examples"]
 venv = ".venv"

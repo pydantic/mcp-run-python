@@ -23,11 +23,6 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
-def anyio_backend():
-    return 'asyncio'
-
-
 @pytest.fixture(name='run_mcp_session', params=['stdio', 'streamable_http'])
 def fixture_run_mcp_session(
     request: pytest.FixtureRequest,
@@ -180,7 +175,7 @@ async def test_install_run_python_code() -> None:
     def logging_callback(log_output: str) -> None:
         logs.append(log_output)
 
-    args = deno_args_prepare('stdio', deps=['numpy'], install_log_handler=logging_callback)
+    args = deno_args_prepare('stdio', deps=['numpy'], prep_log_handler=logging_callback)
 
     assert len(logs) == 1
     assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", logs[0])
