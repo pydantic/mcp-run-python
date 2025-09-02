@@ -102,7 +102,7 @@ async def test_print_handler():
     async with code_sandbox(log_handler=log_handler) as sandbox:
         await sandbox.eval('print("hello", 123)')
 
-    assert logs[0] == snapshot(
+    assert next(((level, msg) for level, msg in logs if level == 'debug'), None) == snapshot(
         (
             'debug',
             'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',

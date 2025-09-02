@@ -98,7 +98,7 @@ def prepare_deno_env(
                 line = line.strip()
                 if deps_log_handler:
                     parts = line.split('|', 1)
-                    level, msg = parts if len(parts) == 2 else ('error', line)
+                    level, msg = parts if len(parts) == 2 else ('info', line)
                     deps_log_handler(cast(LoggingLevel, level), msg)
                 stdout.append(line)
         p.wait()
