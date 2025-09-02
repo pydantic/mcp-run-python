@@ -43,6 +43,7 @@ async def code_sandbox(
     dependencies: list[str] | None = None,
     log_handler: LogHandler | None = None,
     logging_level: mcp_types.LoggingLevel | None = None,
+    allow_networking: bool = True,
 ) -> AsyncIterator['CodeSandbox']:
     """Run code in a secure sandbox.
 
@@ -51,9 +52,14 @@ async def code_sandbox(
         log_handler: A callback function to handle print statements when code is running.
         logging_level: The logging level to use for the print handler, defaults to `info` if `log_handler` is provided.
         deps_log_handler: A callback function to run on log statements during initial install of dependencies.
+        allow_networking: Whether to allow networking or not while executing python code.
     """
     async with async_prepare_deno_env(
-        'stdio', dependencies=dependencies, deps_log_handler=log_handler, return_mode='json'
+        'stdio',
+        dependencies=dependencies,
+        deps_log_handler=log_handler,
+        return_mode='json',
+        allow_networking=allow_networking,
     ) as deno_env:
         server_params = StdioServerParameters(command='deno', args=deno_env.args, cwd=deno_env.cwd)
 

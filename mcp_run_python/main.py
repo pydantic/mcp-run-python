@@ -25,6 +25,7 @@ def run_mcp_server(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
+    allow_networking: bool = True,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -34,9 +35,15 @@ def run_mcp_server(
         dependencies: The dependencies to install.
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
+        allow_networking: Whether to allow networking when running provided python code.
     """
     with prepare_deno_env(
-        mode, dependencies=dependencies, http_port=http_port, return_mode=return_mode, deps_log_handler=deps_log_handler
+        mode,
+        dependencies=dependencies,
+        http_port=http_port,
+        return_mode=return_mode,
+        deps_log_handler=deps_log_handler,
+        allow_networking=allow_networking,
     ) as env:
         if mode == 'streamable_http':
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
@@ -66,6 +73,7 @@ def prepare_deno_env(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
+    allow_networking: bool = True,
 ) -> Iterator[DenoEnv]:
     """Prepare the deno environment for running the mcp-run-python server with Deno.
 
@@ -79,6 +87,8 @@ def prepare_deno_env(
         dependencies: The dependencies to install.
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
+        allow_networking: Whether the prepared DenoEnv should allow networking when running code.
+            Note that we always allow networking during environment initialization to install dependencies.
 
     Returns:
         Yields the deno environment details.
@@ -105,7 +115,13 @@ def prepare_deno_env(
         if p.returncode != 0:
             raise RuntimeError(f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}')
 
-        args = _deno_run_args(mode, http_port=http_port, dependencies=dependencies, return_mode=return_mode)
+        args = _deno_run_args(
+            mode,
+            http_port=http_port,
+            dependencies=dependencies,
+            return_mode=return_mode,
+            allow_networking=allow_networking,
+        )
         yield DenoEnv(cwd, args)
 
     finally:
@@ -120,6 +136,7 @@ async def async_prepare_deno_env(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
+    allow_networking: bool = True,
 ) -> AsyncIterator[DenoEnv]:
     """Async variant of `prepare_deno_env`."""
     ct = await _asyncify(
@@ -129,6 +146,7 @@ async def async_prepare_deno_env(
         dependencies=dependencies,
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
+        allow_networking=allow_networking,
     )
     try:
         yield await _asyncify(ct.__enter__)
@@ -157,10 +175,12 @@ def _deno_run_args(
     http_port: int | None = None,
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
+    allow_networking: bool = True,
 ) -> list[str]:
-    args = [
-        'run',
-        '--allow-net',
+    args = ['run']
+    if allow_networking:
+        args += ['--allow-net']
+    args += [
         '--allow-read=./node_modules',
         '--node-modules-dir=auto',
         'src/main.ts',

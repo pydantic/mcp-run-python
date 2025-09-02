@@ -109,3 +109,18 @@ async def test_print_handler():
         ),
     )
     assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))
+
+
+async def test_disallow_networking():
+    code = """
+import httpx
+async with httpx.AsyncClient() as client:
+    await client.get('http://localhost')
+"""
+    async with code_sandbox(dependencies=['httpx'], allow_networking=False) as sandbox:
+        result = await sandbox.eval(code)
+
+    assert 'error' in result
+    assert result['error'].strip().splitlines()[-1] == snapshot(
+        'httpx.ConnectError: Requires net access to "localhost:80", run again with the --allow-net flag'
+    )
