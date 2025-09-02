@@ -504,7 +504,7 @@ wheels = [
 
 [[package]]
 name = "mcp-run-python"
-version = "0.0.2"
+version = "0.0.20"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
