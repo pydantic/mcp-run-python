@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { loadPyodide } from 'pyodide'
+import { loadPyodide, type PyodideInterface } from 'pyodide'
 import { preparePythonCode } from './prepareEnvCode.ts'
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
 
@@ -8,90 +8,141 @@ export interface CodeFile {
   content: string
 }
 
-export async function runCode(
-  dependencies: string[],
-  file: CodeFile | undefined,
-  log: (level: LoggingLevel, data: string) => void,
-): Promise<RunSuccess | RunError> {
-  // remove once we can upgrade to pyodide 0.27.7 and console.log is no longer used.
-  const realConsoleLog = console.log
-  console.log = (...args: any[]) => log('debug', args.join(' '))
+interface PrepResult {
+  pyodide: PyodideInterface
+  preparePyEnv: PreparePyEnv
+  sys: any
+  prepareStatus: PrepareSuccess | PrepareError
+}
 
-  const output: string[] = []
-  const pyodide = await loadPyodide({
-    stdout: (msg) => {
-      log('info', msg)
-      output.push(msg)
-    },
-    stderr: (msg) => {
-      log('warning', msg)
-      output.push(msg)
-    },
-  })
+export class RunCode {
+  private output: string[] = []
+  private pyodide?: PyodideInterface
+  private preparePyEnv?: PreparePyEnv
+  private prepPromise?: Promise<PrepResult>
 
-  // see https://github.com/pyodide/pyodide/discussions/5512
-  const origLoadPackage = pyodide.loadPackage
-  pyodide.loadPackage = (pkgs, options) =>
-    origLoadPackage(pkgs, {
-      // stop pyodide printing to stdout/stderr
-      messageCallback: (msg: string) => log('debug', `loadPackage: ${msg}`),
-      errorCallback: (msg: string) => {
-        log('error', `loadPackage: ${msg}`)
-        output.push(`install error: ${msg}`)
-      },
-      ...options,
-    })
+  async run(
+    dependencies: string[],
+    file: CodeFile | undefined,
+    log: (level: LoggingLevel, data: string) => void,
+  ): Promise<RunSuccess | RunError> {
+    // remove once we can upgrade to pyodide 0.27.7 and console.log is no longer used.
+    const realConsoleLog = console.log
+    console.log = (...args: any[]) => log('debug', args.join(' '))
 
-  await pyodide.loadPackage(['micropip', 'pydantic'])
-  const sys = pyodide.pyimport('sys')
-
-  const dirPath = '/tmp/mcp_run_python'
-  sys.path.append(dirPath)
-  const pathlib = pyodide.pyimport('pathlib')
-  pathlib.Path(dirPath).mkdir()
-  const moduleName = '_prepare_env'
-
-  pathlib.Path(`${dirPath}/${moduleName}.py`).write_text(preparePythonCode)
-
-  const preparePyEnv: PreparePyEnv = pyodide.pyimport(moduleName)
-
-  const prepareStatus = await preparePyEnv.prepare_env(pyodide.toPy(dependencies))
-  let runResult: RunSuccess | RunError
-  if (prepareStatus.kind == 'error') {
-    runResult = {
-      status: 'install-error',
-      output,
-      error: prepareStatus.message,
+    let pyodide: PyodideInterface
+    let sys: any
+    let prepareStatus: PrepareSuccess | PrepareError | undefined
+    let preparePyEnv: PreparePyEnv
+    if (this.pyodide && this.preparePyEnv) {
+      pyodide = this.pyodide
+      preparePyEnv = this.preparePyEnv
+      sys = pyodide.pyimport('sys')
+    } else {
+      if (!this.prepPromise) {
+        this.prepPromise = this.prepEnv(dependencies, log)
+      }
+      // TODO is this safe if the promise has already been accessed? it seems to work fine
+      const prep = await this.prepPromise
+      pyodide = prep.pyodide
+      preparePyEnv = prep.preparePyEnv
+      sys = prep.sys
+      prepareStatus = prep.prepareStatus
     }
-  } else if (file) {
-    try {
-      const rawValue = await pyodide.runPythonAsync(file.content, {
-        globals: pyodide.toPy({ __name__: '__main__' }),
-        filename: file.name,
-      })
+
+    let runResult: RunSuccess | RunError
+    if (prepareStatus && prepareStatus.kind == 'error') {
+      runResult = {
+        status: 'install-error',
+        output: this.takeOutput(sys),
+        error: prepareStatus.message,
+      }
+    } else if (file) {
+      try {
+        const rawValue = await pyodide.runPythonAsync(file.content, {
+          globals: pyodide.toPy({ __name__: '__main__' }),
+          filename: file.name,
+        })
+        runResult = {
+          status: 'success',
+          output: this.takeOutput(sys),
+          returnValueJson: preparePyEnv.dump_json(rawValue),
+        }
+      } catch (err) {
+        runResult = {
+          status: 'run-error',
+          output: this.takeOutput(sys),
+          error: formatError(err),
+        }
+      }
+    } else {
       runResult = {
         status: 'success',
-        output,
-        returnValueJson: preparePyEnv.dump_json(rawValue),
-      }
-    } catch (err) {
-      runResult = {
-        status: 'run-error',
-        output,
-        error: formatError(err),
+        output: this.takeOutput(sys),
+        returnValueJson: null,
       }
     }
-  } else {
-    runResult = {
-      status: 'success',
-      output,
-      returnValueJson: null,
+    console.log = realConsoleLog
+    return runResult
+  }
+
+  async prepEnv(
+    dependencies: string[],
+    log: (level: LoggingLevel, data: string) => void,
+  ): Promise<PrepResult> {
+    const pyodide = await loadPyodide({
+      stdout: (msg) => {
+        log('info', msg)
+        this.output.push(msg)
+      },
+      stderr: (msg) => {
+        log('warning', msg)
+        this.output.push(msg)
+      },
+    })
+
+    // see https://github.com/pyodide/pyodide/discussions/5512
+    const origLoadPackage = pyodide.loadPackage
+    pyodide.loadPackage = (pkgs, options) =>
+      origLoadPackage(pkgs, {
+        // stop pyodide printing to stdout/stderr
+        messageCallback: (msg: string) => log('debug', `loadPackage: ${msg}`),
+        errorCallback: (msg: string) => {
+          log('error', `loadPackage: ${msg}`)
+          this.output.push(`install error: ${msg}`)
+        },
+        ...options,
+      })
+
+    await pyodide.loadPackage(['micropip', 'pydantic'])
+    const sys = pyodide.pyimport('sys')
+
+    const dirPath = '/tmp/mcp_run_python'
+    sys.path.append(dirPath)
+    const pathlib = pyodide.pyimport('pathlib')
+    pathlib.Path(dirPath).mkdir()
+    const moduleName = '_prepare_env'
+
+    pathlib.Path(`${dirPath}/${moduleName}.py`).write_text(preparePythonCode)
+
+    const preparePyEnv: PreparePyEnv = pyodide.pyimport(moduleName)
+
+    const prepareStatus = await preparePyEnv.prepare_env(pyodide.toPy(dependencies))
+    return {
+      pyodide,
+      preparePyEnv,
+      sys,
+      prepareStatus,
     }
   }
-  sys.stdout.flush()
-  sys.stderr.flush()
-  console.log = realConsoleLog
-  return runResult
+
+  private takeOutput(sys: any): string[] {
+    sys.stdout.flush()
+    sys.stderr.flush()
+    const output = this.output
+    this.output = []
+    return output
+  }
 }
 
 interface RunSuccess {
