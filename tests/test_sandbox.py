@@ -57,12 +57,12 @@ async def test_sandbox(deps: list[str], code: str, expected: Any):
 
 async def test_multiple_commands():
     async with code_sandbox() as sandbox:
-        result = await sandbox.eval('print(1)')
-        assert result == snapshot({'status': 'success', 'output': ['1'], 'return_value': None})
-        result = await sandbox.eval('print(2)')
-        assert result == snapshot({'status': 'success', 'output': ['2'], 'return_value': None})
-        result = await sandbox.eval('print(3)')
-        assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': None})
+        result = await sandbox.eval('print(1)\n1')
+        assert result == snapshot({'status': 'success', 'output': ['1'], 'return_value': 1})
+        result = await sandbox.eval('print(2)\n2')
+        assert result == snapshot({'status': 'success', 'output': ['2'], 'return_value': 2})
+        result = await sandbox.eval('print(3)\n3')
+        assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': 3})
 
 
 async def test_multiple_sandboxes():
