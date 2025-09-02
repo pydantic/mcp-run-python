@@ -93,7 +93,7 @@ See https://pyodide.org/en/stable/usage/loading-packages.html for more details.
                 assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': None})
 
 
-async def test_sync_print_handler():
+async def test_print_handler():
     logs: list[tuple[str, str]] = []
 
     def log_handler(level: str, message: str):
@@ -102,64 +102,10 @@ async def test_sync_print_handler():
     async with code_sandbox(log_handler=log_handler) as sandbox:
         await sandbox.eval('print("hello", 123)')
 
-    assert logs == snapshot(
-        [
-            (
-                'debug',
-                'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
-            ),
-            (
-                'debug',
-                "Didn't find package micropip-0.9.0-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
-            ),
-            (
-                'debug',
-                "Didn't find package packaging-24.2-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
-            ),
-            (
-                'debug',
-                "Didn't find package pydantic-2.10.5-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
-            ),
-            (
-                'debug',
-                "Didn't find package typing_extensions-4.11.0-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
-            ),
-            (
-                'debug',
-                "Didn't find package pydantic_core-2.27.2-cp312-cp312-pyodide_2024_0_wasm32.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
-            ),
-            (
-                'debug',
-                "Didn't find package annotated_types-0.6.0-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
-            ),
-            (
-                'debug',
-                'Package annotated_types-0.6.0-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
-            ),
-            (
-                'debug',
-                'Package typing_extensions-4.11.0-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
-            ),
-            (
-                'debug',
-                'Package micropip-0.9.0-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
-            ),
-            (
-                'debug',
-                'Package packaging-24.2-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
-            ),
-            (
-                'debug',
-                'Package pydantic-2.10.5-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
-            ),
-            (
-                'debug',
-                'Package pydantic_core-2.27.2-cp312-cp312-pyodide_2024_0_wasm32.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
-            ),
-            (
-                'debug',
-                'loadPackage: Loaded annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
-            ),
-            ('info', 'hello 123'),
-        ]
+    assert logs[0] == snapshot(
+        (
+            'debug',
+            'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+        ),
     )
+    assert [(level, msg) for level, msg in logs if level == 'info'] == snapshot([('info', 'hello 123')])

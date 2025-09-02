@@ -44,7 +44,7 @@ def run_mcp_server(
             logger.info('Running mcp-run-python via %s...', mode)
 
         try:
-            p = subprocess.run(('deno', *env.deno_args), cwd=env.cwd)
+            p = subprocess.run(('deno', *env.args), cwd=env.cwd)
         except KeyboardInterrupt:  # pragma: no cover
             logger.warning('Server stopped.')
             return 0
@@ -55,7 +55,7 @@ def run_mcp_server(
 @dataclass
 class DenoEnv:
     cwd: Path
-    deno_args: list[str]
+    args: list[str]
 
 
 @contextmanager
@@ -97,7 +97,8 @@ def prepare_deno_env(
             for line in p.stdout:
                 line = line.strip()
                 if deps_log_handler:
-                    level, msg = line.split('|', 1)
+                    parts = line.split('|', 1)
+                    level, msg = parts if len(parts) == 2 else ('error', line)
                     deps_log_handler(cast(LoggingLevel, level), msg)
                 stdout.append(line)
         p.wait()

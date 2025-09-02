@@ -55,7 +55,7 @@ async def code_sandbox(
     async with async_prepare_deno_env(
         'stdio', dependencies=dependencies, deps_log_handler=log_handler, return_mode='json'
     ) as env:
-        server_params = StdioServerParameters(command='deno', args=env.deno_args, cwd=env.cwd)
+        server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
 
         logging_callback: Callable[[mcp_types.LoggingMessageNotificationParams], Awaitable[None]] | None = None
 

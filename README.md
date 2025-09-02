@@ -49,13 +49,7 @@ where:
 - `example` will run a minimal Python script using `numpy`, useful for checking that the package is working, for the code
   to run successfully, you'll need to install `numpy` using `uvx mcp-run-python --deps numpy example`
 
-## Usage in codes as an MCP server
-
-```bash
-pip install mcp-run-python
-# or
-uv add mcp-run-python
-```
+## Usage with Pydantic AI
 
 Then you can use `mcp-run-python` with Pydantic AI:
 
@@ -70,7 +64,7 @@ logfire.configure()
 logfire.instrument_mcp()
 logfire.instrument_pydantic_ai()
 
-server = MCPServerStdio('deno', args=deno_args_prepare('stdio'))
+server = MCPServerStdio('uvx', args=['mcp-run-python@latest', 'stdio'], timeout=10)
 agent = Agent('claude-3-5-haiku-latest', toolsets=[server])
 
 
@@ -85,9 +79,48 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
-**Note**: `deno_args_prepare` can take `deps` as a keyword argument to install dependencies.
-As well as returning the args needed to run `mcp_run_python`, `deno_args_prepare` installs the dependencies
-so they can be used by the server.
+## Usage in codes as an MCP server
+
+First install the `mcp-run-python` package:
+
+```bash
+pip install mcp-run-python
+# or
+uv add mcp-run-python
+```
+
+With `mcp-run-python` installed, you can also run deno directly with `prepare_deno_env` or `async_prepare_deno_env`
+
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPServerStdio
+from mcp_run_python import async_prepare_deno_env
+
+import logfire
+
+logfire.configure()
+logfire.instrument_mcp()
+logfire.instrument_pydantic_ai()
+
+
+async def main():
+    async with async_prepare_deno_env('stdio') as deno_env:
+        server = MCPServerStdio('deno', args=deno_env.args, cwd=deno_env.cwd, timeout=10)
+        agent = Agent('claude-3-5-haiku-latest', toolsets=[server])
+        async with agent:
+            result = await agent.run('How many days between 2000-01-01 and 2025-03-18?')
+        print(result.output)
+        #> There are 9,208 days between January 1, 2000, and March 18, 2025.w
+
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
+```
+
+**Note**: `prepare_deno_env` can take `deps` as a keyword argument to install dependencies.
+As well as returning the args needed to run `mcp_run_python`, `prepare_deno_env` creates a new deno environment
+and installs the dependencies so they can be used by the server.
 
 ## Usage in code with `code_sandbox`
 

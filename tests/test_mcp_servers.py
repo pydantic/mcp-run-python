@@ -31,7 +31,7 @@ def fixture_run_mcp_session(
     async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
         if request.param == 'stdio':
             async with async_prepare_deno_env('stdio', dependencies=deps) as env:
-                server_params = StdioServerParameters(command='deno', args=env.deno_args, cwd=env.cwd)
+                server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
                 async with stdio_client(server_params) as (read, write):
                     async with ClientSession(read, write) as session:
                         yield session
@@ -39,7 +39,7 @@ def fixture_run_mcp_session(
             assert request.param == 'streamable_http', request.param
             port = 3101
             async with async_prepare_deno_env('streamable_http', http_port=port, dependencies=deps) as env:
-                p = subprocess.Popen(['deno', *env.deno_args], cwd=env.cwd)
+                p = subprocess.Popen(['deno', *env.args], cwd=env.cwd)
                 try:
                     url = f'http://localhost:{port}/mcp'
                     await wait_for_server(url, 8)
@@ -142,7 +142,7 @@ x=4
 }
 </return_value>\
 """),
-            id='magic-comment-import',
+            id='pydantic-dependency',
         ),
         pytest.param(
             [],
@@ -189,7 +189,7 @@ async def test_install_run_python_code() -> None:
         assert len(logs) >= 10
         assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", '\n'.join(logs))
 
-        server_params = StdioServerParameters(command='deno', args=env.deno_args, cwd=env.cwd)
+        server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as mcp_session:
                 await mcp_session.initialize()
