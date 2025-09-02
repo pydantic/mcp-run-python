@@ -3,15 +3,15 @@
   "license": "MIT",
   "nodeModulesDir": "auto",
   "exports": {
-    ".": "./deno/main.ts"
+    ".": "./src/main.ts"
   },
   "compilerOptions": {
     "noUncheckedIndexedAccess": true
   },
   "tasks": {
-    "dev": "deno run -N -R=node_modules -W=node_modules deno/main.ts",
+    "dev": "deno run -N -R=node_modules -W=node_modules src/main.ts",
     "lint": "deno lint",
-    "typecheck": "deno check deno",
+    "typecheck": "deno check src",
     "format": "deno fmt"
   },
   "imports": {
@@ -26,6 +26,6 @@
     "lineWidth": 120,
     "semiColons": false,
     "singleQuote": true,
-    "include": ["deno"]
+    "include": ["src"]
   }
 }

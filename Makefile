@@ -23,7 +23,7 @@ build: ## Build mcp_run_python/deno/prepareEnvCode.ts
 
 .PHONY: format-ts
 format-ts: ## Format TS code
-	cd mcp_run_python && deno task format
+	cd mcp_run_python/deno && deno task format
 
 .PHONY: format-py
 format-py: ## Format Python code
@@ -35,7 +35,7 @@ format: format-ts format-py ## Format all code
 
 .PHONY: lint-ts
 lint-ts: ## Lint TS code
-	cd mcp_run_python && deno task lint
+	cd mcp_run_python/deno && deno task lint
 
 .PHONY: lint-py
 lint-py: ## Lint Python code
@@ -47,7 +47,7 @@ lint:  lint-ts lint-py ## Lint all code
 
 .PHONY: typecheck-ts
 typecheck-ts: build ## Typecheck TS code
-	cd mcp_run_python && deno task typecheck
+	cd mcp_run_python/deno && deno task typecheck
 
 .PHONY: typecheck-py
 typecheck-py: ## Typecheck the code

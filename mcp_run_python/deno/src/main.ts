@@ -234,9 +234,7 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
   })
 
   server.listen(port, () => {
-    console.log(
-      `Running MCP Run Python version ${VERSION} with Streamable HTTP transport on port ${port}`,
-    )
+    console.log(`Listening on port ${port}`)
   })
 }
 
@@ -258,7 +256,7 @@ async function installDeps(deps: string[]) {
     undefined,
     (level, data) =>
       // use warn to avoid recursion since console.log is patched in runCode
-      console.error(`${level}: ${data}`),
+      console.error(`${level}|${data}`),
   )
   if (result.status !== 'success') {
     console.error('Failed to install dependencies')

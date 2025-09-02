@@ -44,6 +44,13 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: lint-py
+        name: lint python
+        entry: make
+        args: [lint-py]
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: typecheck-py
         name: typecheck python
         entry: make

@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any
 
 import pytest
@@ -66,26 +65,101 @@ async def test_multiple_commands():
         assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': None})
 
 
+async def test_multiple_sandboxes():
+    async with code_sandbox(dependencies=['numpy']) as sandbox_a:
+        async with code_sandbox(dependencies=['requests']) as sandbox_b:
+            async with code_sandbox() as sandbox_c:
+                result = await sandbox_a.eval('import numpy\nnumpy.array([1, 2, 3])')
+                assert result == snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]})
+                result = await sandbox_b.eval('import numpy\nnumpy.array([1, 2, 3])')
+                assert result == snapshot(
+                    {
+                        'status': 'run-error',
+                        'output': [],
+                        'error': """\
+Traceback (most recent call last):
+  File "main.py", line 1, in <module>
+    import numpy
+ModuleNotFoundError: No module named 'numpy'
+The module 'numpy' is included in the Pyodide distribution, but it is not installed.
+You can install it by calling:
+  await micropip.install("numpy") in Python, or
+  await pyodide.loadPackage("numpy") in JavaScript
+See https://pyodide.org/en/stable/usage/loading-packages.html for more details.
+""",
+                    }
+                )
+                result = await sandbox_c.eval('print(3)')
+                assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': None})
+
+
 async def test_sync_print_handler():
     logs: list[tuple[str, str]] = []
 
-    def print_handler(level: str, message: str):
+    def log_handler(level: str, message: str):
         logs.append((level, message))
 
-    async with code_sandbox(print_handler=print_handler) as sandbox:
+    async with code_sandbox(log_handler=log_handler) as sandbox:
         await sandbox.eval('print("hello", 123)')
 
-    assert logs == snapshot([('info', 'hello 123')])
-
-
-async def test_async_print_handler():
-    logs: list[tuple[str, str]] = []
-
-    async def print_handler(level: str, message: str):
-        await asyncio.sleep(0.1)
-        logs.append((level, message))
-
-    async with code_sandbox(print_handler=print_handler) as sandbox:
-        await sandbox.eval('print("hello", 123)')
-
-    assert logs == snapshot([('info', 'hello 123')])
+    assert logs == snapshot(
+        [
+            (
+                'debug',
+                'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+            ),
+            (
+                'debug',
+                "Didn't find package micropip-0.9.0-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
+            ),
+            (
+                'debug',
+                "Didn't find package packaging-24.2-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
+            ),
+            (
+                'debug',
+                "Didn't find package pydantic-2.10.5-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
+            ),
+            (
+                'debug',
+                "Didn't find package typing_extensions-4.11.0-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
+            ),
+            (
+                'debug',
+                "Didn't find package pydantic_core-2.27.2-cp312-cp312-pyodide_2024_0_wasm32.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
+            ),
+            (
+                'debug',
+                "Didn't find package annotated_types-0.6.0-py3-none-any.whl locally, attempting to load from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/",
+            ),
+            (
+                'debug',
+                'Package annotated_types-0.6.0-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
+            ),
+            (
+                'debug',
+                'Package typing_extensions-4.11.0-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
+            ),
+            (
+                'debug',
+                'Package micropip-0.9.0-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
+            ),
+            (
+                'debug',
+                'Package packaging-24.2-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
+            ),
+            (
+                'debug',
+                'Package pydantic-2.10.5-py3-none-any.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
+            ),
+            (
+                'debug',
+                'Package pydantic_core-2.27.2-cp312-cp312-pyodide_2024_0_wasm32.whl loaded from https://cdn.jsdelivr.net/pyodide/v0.27.6/full/, caching the wheel in node_modules for future use.',
+            ),
+            (
+                'debug',
+                'loadPackage: Loaded annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+            ),
+            ('info', 'hello 123'),
+        ]
+    )

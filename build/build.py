@@ -8,7 +8,7 @@ root_dir = this_dir.parent
 
 # Define source and destination paths
 src = this_dir / 'prepare_env.py'
-dst = root_dir / 'mcp_run_python' / 'deno' / 'prepareEnvCode.ts'
+dst = root_dir / 'mcp_run_python' / 'deno' / 'src' / 'prepareEnvCode.ts'
 
 python_code = src.read_text()
 
