@@ -286,6 +286,9 @@ a
   )
   console.log('Tool return value:')
   console.log(asXml(result))
+  if (result.status !== 'success') {
+    Deno.exit(1)
+  }
 }
 
 // list of log levels to use for level comparison
