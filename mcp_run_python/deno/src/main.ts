@@ -234,9 +234,7 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
   })
 
   server.listen(port, () => {
-    console.log(
-      `Running MCP Run Python version ${VERSION} with Streamable HTTP transport on port ${port}`,
-    )
+    console.log(`Listening on port ${port}`)
   })
 }
 
@@ -256,12 +254,10 @@ async function installDeps(deps: string[]) {
   const result = await runCode(
     deps,
     undefined,
-    (level, data) =>
-      // use warn to avoid recursion since console.log is patched in runCode
-      console.error(`${level}: ${data}`),
+    (level, data) => console.error(`${level}|${data}`),
   )
   if (result.status !== 'success') {
-    console.error('Failed to install dependencies')
+    console.error('error|Failed to install dependencies')
     Deno.exit(1)
   }
 }
@@ -282,9 +278,8 @@ a
   const result = await runCode(
     deps,
     { name: 'example.py', content: code },
-    (level, data) =>
-      // use warn to avoid recursion since console.log is patched in runCode
-      console.error(`${level}: ${data}`),
+    // use warn to avoid recursion since console.log is patched in runCode
+    (level, data) => console.warn(`${level}: ${data}`),
   )
   console.log('Tool return value:')
   console.log(asXml(result))

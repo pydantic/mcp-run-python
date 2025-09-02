@@ -4,8 +4,8 @@ import asyncio
 import re
 import subprocess
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, AsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import TYPE_CHECKING
 
 import pytest
 from httpx import AsyncClient, HTTPError
@@ -14,8 +14,8 @@ from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from mcp_run_python import deno_args_prepare
-from mcp_run_python._cli import cli
+from mcp_run_python import async_prepare_deno_env
+from mcp_run_python._cli import cli_logic
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -26,44 +26,54 @@ pytestmark = pytest.mark.anyio
 @pytest.fixture(name='run_mcp_session', params=['stdio', 'streamable_http'])
 def fixture_run_mcp_session(
     request: pytest.FixtureRequest,
-) -> Callable[[list[str]], AsyncContextManager[ClientSession]]:
+) -> Callable[[list[str]], AbstractAsyncContextManager[ClientSession]]:
     @asynccontextmanager
     async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
         if request.param == 'stdio':
-            server_params = StdioServerParameters(command='deno', args=deno_args_prepare('stdio', deps=deps))
-            async with stdio_client(server_params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    yield session
+            async with async_prepare_deno_env('stdio', dependencies=deps) as env:
+                server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
+                async with stdio_client(server_params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        yield session
         else:
             assert request.param == 'streamable_http', request.param
             port = 3101
-            p = subprocess.Popen(['deno', *deno_args_prepare('streamable_http', port=3101, deps=deps)])
-            try:
-                url = f'http://localhost:{port}/mcp'
+            async with async_prepare_deno_env('streamable_http', http_port=port, dependencies=deps) as env:
+                p = subprocess.Popen(['deno', *env.args], cwd=env.cwd)
+                try:
+                    url = f'http://localhost:{port}/mcp'
+                    await wait_for_server(url, 8)
 
-                async with AsyncClient() as client:
-                    for _ in range(10):
-                        try:
-                            await client.get(url, timeout=0.01)
-                        except HTTPError:
-                            await asyncio.sleep(0.1)
-                        else:
-                            break
+                    async with streamablehttp_client(url) as (read_stream, write_stream, _):
+                        async with ClientSession(read_stream, write_stream) as session:
+                            yield session
 
-                async with streamablehttp_client(url) as (read_stream, write_stream, _):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        yield session
-
-            finally:
-                p.terminate()
-                exit_code = p.wait()
-                if exit_code > 0:
-                    pytest.fail(f'Process exited with code {exit_code}')
+                finally:
+                    p.terminate()
+                    exit_code = p.wait()
+                    if exit_code > 0:
+                        pytest.fail(f'Process exited with code {exit_code}')
 
     return run_mcp
 
 
-async def test_list_tools(run_mcp_session: Callable[[list[str]], AsyncContextManager[ClientSession]]) -> None:
+async def wait_for_server(url: str, timeout: float):
+    sleep = 0.1
+    steps = int(timeout / sleep)
+
+    async with AsyncClient() as client:
+        for _ in range(steps):
+            try:
+                await client.get(url, timeout=0.01)
+            except HTTPError:
+                await asyncio.sleep(sleep)
+            else:
+                return
+
+    raise TimeoutError(f'URL {url} did not become available within {timeout} seconds')
+
+
+async def test_list_tools(run_mcp_session: Callable[[list[str]], AbstractAsyncContextManager[ClientSession]]) -> None:
     async with run_mcp_session([]) as mcp_session:
         await mcp_session.initialize()
         tools = await mcp_session.list_tools()
@@ -132,7 +142,7 @@ x=4
 }
 </return_value>\
 """),
-            id='magic-comment-import',
+            id='pydantic-dependency',
         ),
         pytest.param(
             [],
@@ -155,7 +165,7 @@ NameError: name 'unknown' is not defined
     ],
 )
 async def test_run_python_code(
-    run_mcp_session: Callable[[list[str]], AsyncContextManager[ClientSession]],
+    run_mcp_session: Callable[[list[str]], AbstractAsyncContextManager[ClientSession]],
     deps: list[str],
     code: list[str],
     expected_output: str,
@@ -172,28 +182,27 @@ async def test_run_python_code(
 async def test_install_run_python_code() -> None:
     logs: list[str] = []
 
-    def logging_callback(log_output: str) -> None:
-        logs.append(log_output)
+    def logging_callback(level: str, message: str) -> None:
+        logs.append(f'{level}: {message}')
 
-    args = deno_args_prepare('stdio', deps=['numpy'], prep_log_handler=logging_callback)
+    async with async_prepare_deno_env('stdio', dependencies=['numpy'], deps_log_handler=logging_callback) as env:
+        assert len(logs) >= 10
+        assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", '\n'.join(logs))
 
-    assert len(logs) == 1
-    assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", logs[0])
-
-    server_params = StdioServerParameters(command='deno', args=args)
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as mcp_session:
-            await mcp_session.initialize()
-            await mcp_session.set_logging_level('debug')
-            result = await mcp_session.call_tool(
-                'run_python_code', {'python_code': 'import numpy\nnumpy.array([1, 2, 3])'}
-            )
-            assert len(result.content) == 1
-            content = result.content[0]
-            assert isinstance(content, types.TextContent)
-            assert (
-                content.text
-                == """\
+        server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as mcp_session:
+                await mcp_session.initialize()
+                await mcp_session.set_logging_level('debug')
+                result = await mcp_session.call_tool(
+                    'run_python_code', {'python_code': 'import numpy\nnumpy.array([1, 2, 3])'}
+                )
+                assert len(result.content) == 1
+                content = result.content[0]
+                assert isinstance(content, types.TextContent)
+                assert (
+                    content.text
+                    == """\
 <status>success</status>
 <return_value>
 [
@@ -203,14 +212,14 @@ async def test_install_run_python_code() -> None:
 ]
 </return_value>\
 """
-            )
+                )
 
 
 def test_cli_version(capsys: pytest.CaptureFixture[str]):
-    cli(['--version'])
+    assert cli_logic(['--version']) == 0
     captured = capsys.readouterr()
     assert captured.out.startswith('mcp-run-python ')
 
 
 def test_cli_example():
-    cli(['--deps', 'numpy', 'example'])
+    assert cli_logic(['--deps', 'numpy', 'example']) == 0

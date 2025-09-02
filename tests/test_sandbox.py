@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any
 
 import pytest
@@ -66,26 +65,47 @@ async def test_multiple_commands():
         assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': None})
 
 
-async def test_sync_print_handler():
+async def test_multiple_sandboxes():
+    async with code_sandbox(dependencies=['numpy']) as sandbox_a:
+        async with code_sandbox(dependencies=['requests']) as sandbox_b:
+            async with code_sandbox() as sandbox_c:
+                result = await sandbox_a.eval('import numpy\nnumpy.array([1, 2, 3])')
+                assert result == snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]})
+                result = await sandbox_b.eval('import numpy\nnumpy.array([1, 2, 3])')
+                assert result == snapshot(
+                    {
+                        'status': 'run-error',
+                        'output': [],
+                        'error': """\
+Traceback (most recent call last):
+  File "main.py", line 1, in <module>
+    import numpy
+ModuleNotFoundError: No module named 'numpy'
+The module 'numpy' is included in the Pyodide distribution, but it is not installed.
+You can install it by calling:
+  await micropip.install("numpy") in Python, or
+  await pyodide.loadPackage("numpy") in JavaScript
+See https://pyodide.org/en/stable/usage/loading-packages.html for more details.
+""",
+                    }
+                )
+                result = await sandbox_c.eval('print(3)')
+                assert result == snapshot({'status': 'success', 'output': ['3'], 'return_value': None})
+
+
+async def test_print_handler():
     logs: list[tuple[str, str]] = []
 
-    def print_handler(level: str, message: str):
+    def log_handler(level: str, message: str):
         logs.append((level, message))
 
-    async with code_sandbox(print_handler=print_handler) as sandbox:
+    async with code_sandbox(log_handler=log_handler) as sandbox:
         await sandbox.eval('print("hello", 123)')
 
-    assert logs == snapshot([('info', 'hello 123')])
-
-
-async def test_async_print_handler():
-    logs: list[tuple[str, str]] = []
-
-    async def print_handler(level: str, message: str):
-        await asyncio.sleep(0.1)
-        logs.append((level, message))
-
-    async with code_sandbox(print_handler=print_handler) as sandbox:
-        await sandbox.eval('print("hello", 123)')
-
-    assert logs == snapshot([('info', 'hello 123')])
+    assert next(((level, msg) for level, msg in logs if level == 'debug'), None) == snapshot(
+        (
+            'debug',
+            'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+        ),
+    )
+    assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))

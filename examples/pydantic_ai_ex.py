@@ -1,9 +1,8 @@
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 
-from mcp_run_python import deno_args_prepare
-
-server = MCPServerStdio('deno', args=deno_args_prepare('stdio'))
+server = MCPServerStdio('uv', args=['run', 'mcp-run-python', 'stdio'], timeout=10)
+# server = MCPServerStdio('uvx', args=['mcp-run-python@latest', 'stdio'], timeout=10)
 agent_with_python = Agent('claude-3-5-haiku-latest', toolsets=[server])
 
 

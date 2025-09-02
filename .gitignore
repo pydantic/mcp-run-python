@@ -13,4 +13,4 @@ env*/
 .coverage*
 /test_tmp/
 
-/mcp_run_python/deno/prepareEnvCode.ts
+/mcp_run_python/deno/src/prepareEnvCode.ts

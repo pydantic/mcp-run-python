@@ -1,7 +1,7 @@
 from mcp_run_python import code_sandbox
 
 
-def print_wait(level: str, message: str):
+def log_handler(level: str, message: str):
     print(f'{level}: {message}')
 
 
@@ -14,7 +14,8 @@ a
 
 
 async def main():
-    async with code_sandbox(dependencies=['numpy'], print_handler=print_wait) as sandbox:
+    async with code_sandbox(dependencies=['numpy'], log_handler=log_handler, logging_level='debug') as sandbox:
+        print('running code')
         result = await sandbox.eval(code)
         print(f'{result["status"].title()}:')
         if result['status'] == 'success':
