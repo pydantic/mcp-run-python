@@ -11,7 +11,7 @@ import { type LoggingLevel, SetLevelRequestSchema } from '@modelcontextprotocol/
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
-import { asJson, asXml, runCode } from './runCode.ts'
+import { asJson, asXml, RunCode } from './runCode.ts'
 import { Buffer } from 'node:buffer'
 
 const VERSION = '0.0.13'
@@ -57,6 +57,7 @@ options:
  * Create an MCP server with the `run_python_code` tool registered.
  */
 function createServer(deps: string[], returnMode: string): McpServer {
+  const runCode = new RunCode()
   const server = new McpServer(
     {
       name: 'MCP Run Python',
@@ -90,7 +91,7 @@ The code will be executed with Python 3.12.
     { python_code: z.string().describe('Python code to run') },
     async ({ python_code }: { python_code: string }) => {
       const logPromises: Promise<void>[] = []
-      const result = await runCode(
+      const result = await runCode.run(
         deps,
         { name: 'main.py', content: python_code },
         (level, data) => {
@@ -251,7 +252,8 @@ async function runStdio(deps: string[], returnMode: string) {
  * Run pyodide to download and install dependencies.
  */
 async function installDeps(deps: string[]) {
-  const result = await runCode(
+  const runCode = new RunCode()
+  const result = await runCode.run(
     deps,
     undefined,
     (level, data) => console.error(`${level}|${data}`),
@@ -275,7 +277,8 @@ a = numpy.array([1, 2, 3])
 print('numpy array:', a)
 a
 `
-  const result = await runCode(
+  const runCode = new RunCode()
+  const result = await runCode.run(
     deps,
     { name: 'example.py', content: code },
     // use warn to avoid recursion since console.log is patched in runCode

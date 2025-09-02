@@ -1,3 +1,5 @@
+import time
+
 from mcp_run_python import code_sandbox
 
 
@@ -16,12 +18,11 @@ a
 async def main():
     async with code_sandbox(dependencies=['numpy'], log_handler=log_handler, logging_level='debug') as sandbox:
         print('running code')
-        result = await sandbox.eval(code)
-        print(f'{result["status"].title()}:')
-        if result['status'] == 'success':
-            print(result['return_value'])
-        else:
-            print(result['error'])
+        await sandbox.eval(code)
+        tic = time.time()
+        await asyncio.gather(*[sandbox.eval(code) for _ in range(10)])
+        toc = time.time()
+        print(f'Execution time: {toc - tic:.6f} seconds')
 
 
 if __name__ == '__main__':
