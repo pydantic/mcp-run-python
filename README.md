@@ -32,7 +32,7 @@ To use this server, you must have both Python and [Deno](https://deno.com/) inst
 The server can be run with `deno` installed using `uvx`:
 
 ```bash
-uvx mcp-run-python [stdio|streamable-http|warmup]
+uvx mcp-run-python [-h] [--version] [--port PORT] [--deps DEPS] {stdio,streamable-http,example}
 ```
 
 where:
@@ -44,8 +44,8 @@ where:
   [Streamable HTTP MCP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) -
   suitable for running the server as an HTTP server to connect locally or remotely. This supports stateful requests, but
   does not require the client to hold a stateful connection like SSE
-- `warmup` will run a minimal Python script to download and cache the Python standard library. This is also useful to
-  check the server is running correctly.
+- `example` will run a minimal Python script using `numpy`, useful for checking that the package is working, for the code
+  to run successfully, you'll need to install `numpy` using `uvx mcp-run-python --deps numpy example`
 
 ## Usage in codes
 
@@ -60,7 +60,7 @@ Then you can use `mcp-run-python` with Pydantic AI:
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
-from mcp_run_python import deno_args
+from mcp_run_python import deno_prepare_args
 
 import logfire
 
@@ -68,7 +68,7 @@ logfire.configure()
 logfire.instrument_mcp()
 logfire.instrument_pydantic_ai()
 
-server = MCPServerStdio('deno', args=deno_args('stdio'))
+server = MCPServerStdio('deno', args=deno_prepare_args('stdio'))
 agent = Agent('claude-3-5-haiku-latest', toolsets=[server])
 
 
@@ -83,6 +83,10 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
+**Note**: `deno_prepare_args` can take `deps` as a keyword argument to install dependencies.
+As well as returning the args needed to run `mcp_run_python`, `deno_prepare_args` installs the dependencies
+so they can be used by the server.
+
 ## Logging
 
 MCP Run Python supports emitting stdout and stderr from the python execution as [MCP logging messages](https://github.com/modelcontextprotocol/specification/blob/eb4abdf2bb91e0d5afd94510741eadd416982350/docs/specification/draft/server/utilities/logging.md?plain=1).
@@ -90,3 +94,64 @@ MCP Run Python supports emitting stdout and stderr from the python execution as 
 For logs to be emitted you must set the logging level when connecting to the server. By default, the log level is set to the highest level, `emergency`.
 
 Currently, it's not possible to demonstrate this due to a bug in the Python MCP Client, see [modelcontextprotocol/python-sdk#201](https://github.com/modelcontextprotocol/python-sdk/issues/201#issuecomment-2727663121).
+
+## Dependencies
+
+`mcp_run_python` uses a two step process to install dependencies while avoiding any risk that sandboxed code can
+edit the filesystem.
+
+* `deno` is first run with write permissions to the `node_modules` directory and dependencies are installed, causing wheels to be written to ``
+* `deno` is then run with read-only permissions to the `node_modules` directory to run untrusted code.
+
+Dependencies must be provided when initializing the server so they can be installed in the first step.
+
+Here's an example of manually running code with `mcp-run-python`:
+
+```python
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+from mcp_run_python import deno_prepare_args
+
+code = """
+import numpy
+a = numpy.array([1, 2, 3])
+print(a)
+a
+"""
+server_params = StdioServerParameters(
+    command='deno',
+    args=deno_prepare_args('stdio', deps=['numpy'])
+)
+
+
+async def main():
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            print(len(tools.tools))
+            #> 1
+            print(repr(tools.tools[0].name))
+            #> 'run_python_code'
+            print(repr(tools.tools[0].inputSchema))
+            """
+            {'type': 'object', 'properties': {'python_code': {'type': 'string', 'description': 'Python code to run'}}, 'required': ['python_code'], 'additionalProperties': False, '$schema': 'http://json-schema.org/draft-07/schema#'}
+            """
+            result = await session.call_tool('run_python_code', {'python_code': code})
+            print(result.content[0].text)
+            """
+            <status>success</status>
+            <dependencies>["numpy"]</dependencies>
+            <output>
+            [1 2 3]
+            </output>
+            <return_value>
+            [
+              1,
+              2,
+              3
+            ]
+            </return_value>
+            """
+```
