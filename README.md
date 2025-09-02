@@ -25,6 +25,8 @@ the rest of the operating system.
 - **Asynchronous Support**: Runs async code properly
 - **Error Handling**: Provides detailed error reports for debugging
 
+_(This code was previously part of [Pydantic AI](https://github.com/pydantic/pydantic-ai) but was moved to a separate repo to make it easier to maintain.)_
+
 ## Usage
 
 To use this server, you must have both Python and [Deno](https://deno.com/) installed.
