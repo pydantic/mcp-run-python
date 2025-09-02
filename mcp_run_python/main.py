@@ -16,9 +16,9 @@ def deno_run_server(
     *,
     port: int | None = None,
     deps: list[str] | None = None,
-    install_log_handler: Callable[[str], None] | None = None,
+    prep_log_handler: Callable[[str], None] | None = None,
 ):
-    deno_install_deps(deps, install_log_handler)
+    deno_install_deps(deps, prep_log_handler)
     logger.info('Running mcp-run-python server...')
     try:
         subprocess.run(('deno', *deno_run_args(mode, port=port, deps=deps)), cwd=THIS_DIR)
@@ -32,15 +32,15 @@ def deno_args_prepare(
     port: int | None = None,
     deps: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
-    install_log_handler: Callable[[str], None] | None = None,
+    prep_log_handler: Callable[[str], None] | None = None,
 ) -> list[str]:
-    deno_install_deps(deps, install_log_handler)
+    deno_install_deps(deps, prep_log_handler)
     return deno_run_args(mode, port=port, deps=deps, return_mode=return_mode)
 
 
 def deno_install_deps(
     deps: list[str] | None = None,
-    install_log_handler: Callable[[str], None] | None = None,
+    prep_log_handler: Callable[[str], None] | None = None,
 ):
     if NODE_MODULES.exists():
         logger.debug('Deleting existing dependencies in node_modules...')
@@ -49,8 +49,8 @@ def deno_install_deps(
     logger.debug('Installing dependencies %s...', deps)
     args = 'deno', *deno_install_args(deps)
     p = subprocess.run(args, cwd=THIS_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    if install_log_handler is not None:
-        install_log_handler(p.stdout.decode().strip())
+    if prep_log_handler is not None:
+        prep_log_handler(p.stdout.decode().strip())
 
 
 def deno_install_args(deps: list[str] | None = None) -> list[str]:

@@ -47,7 +47,7 @@ where:
 - `example` will run a minimal Python script using `numpy`, useful for checking that the package is working, for the code
   to run successfully, you'll need to install `numpy` using `uvx mcp-run-python --deps numpy example`
 
-## Usage in codes
+## Usage in codes as an MCP server
 
 ```bash
 pip install mcp-run-python
@@ -87,6 +87,34 @@ if __name__ == '__main__':
 As well as returning the args needed to run `mcp_run_python`, `deno_args_prepare` installs the dependencies
 so they can be used by the server.
 
+## Usage in code with `code_sandbox`
+
+`mcp-run-python` includes a helper function `code_sandbox` to allow you to easily run code in a sandbox.
+
+```py
+from mcp_run_python import code_sandbox
+
+code = """
+import numpy
+a = numpy.array([1, 2, 3])
+print(a)
+a
+"""
+
+async def main():
+    async with code_sandbox(dependencies=['numpy']) as sandbox:
+        result = await sandbox.eval(code)
+        print(result)
+
+
+if __name__ == '__main__':
+    import asyncio
+
+    asyncio.run(main())
+```
+
+Under the hood, `code_sandbox` runs an MCP server using `stdio`. You can run multiple code blocks with a single sandbox.
+
 ## Logging
 
 MCP Run Python supports emitting stdout and stderr from the python execution as [MCP logging messages](https://github.com/modelcontextprotocol/specification/blob/eb4abdf2bb91e0d5afd94510741eadd416982350/docs/specification/draft/server/utilities/logging.md?plain=1).
@@ -113,12 +141,7 @@ from mcp.client.stdio import stdio_client
 
 from mcp_run_python import deno_args_prepare
 
-code = """
-import numpy
-a = numpy.array([1, 2, 3])
-print(a)
-a
-"""
+
 server_params = StdioServerParameters(
     command='deno',
     args=deno_args_prepare('stdio', deps=['numpy'])

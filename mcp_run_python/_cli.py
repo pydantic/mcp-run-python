@@ -30,6 +30,6 @@ def cli(args_list: Sequence[str] | None = None):  # pragma: no cover
         print(f'mcp-run-python {__version__}')
     elif args.mode:
         deps: list[str] = args.deps.split(',') if args.deps else []
-        deno_run_server(args.mode.replace('-', '_'), port=args.port, deps=deps, install_log_handler=print)
+        deno_run_server(args.mode.replace('-', '_'), port=args.port, deps=deps, prep_log_handler=print)
     else:
         parser.error('Mode is required')

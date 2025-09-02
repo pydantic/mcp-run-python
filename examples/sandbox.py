@@ -1,10 +1,15 @@
 from mcp_run_python import code_sandbox
 
 
+async def print_wait(level: str, message: str):
+    await asyncio.sleep(1)
+    print(f'[{level}] {message}')
+
+
 async def main():
-    async with code_sandbox(dependencies=['numpy']) as sandbox:
+    async with code_sandbox(dependencies=['numpy'], print_handler=print_wait) as sandbox:
         for i in range(10):
-            result = await sandbox.run(f'import numpy as np\na = np.array([1, 2, {i}])\nprint(a)\na')
+            result = await sandbox.eval(f'import numpy as np\na = np.array([1, 2, {i}])\nprint(a)\na')
             print(result)
 
 

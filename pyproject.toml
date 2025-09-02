@@ -54,6 +54,7 @@ dev = [
     "pytest-pretty>=1.2.0",
     "ruff>=0.12.11",
     "coverage>=7.10.6",
+    "pydantic-ai-slim[anthropic,mcp]>=0.8.1",
 ]
 
 [project.scripts]
@@ -85,5 +86,5 @@ reportIncompatibleUnannotatedOverride = true
 reportImplicitAbstractClass = true
 reportMissingTypeStubs = false
 reportMissingModuleSource = false
-include = ["build", "mcp_run_python", "tests"]
+include = ["build", "mcp_run_python", "tests", "examples"]
 venv = ".venv"
