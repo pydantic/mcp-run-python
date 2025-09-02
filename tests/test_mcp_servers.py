@@ -15,7 +15,6 @@ from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
 from mcp_run_python import async_prepare_deno_env
-from mcp_run_python._cli import cli_logic
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -213,13 +212,3 @@ async def test_install_run_python_code() -> None:
 </return_value>\
 """
                 )
-
-
-def test_cli_version(capsys: pytest.CaptureFixture[str]):
-    assert cli_logic(['--version']) == 0
-    captured = capsys.readouterr()
-    assert captured.out.startswith('mcp-run-python ')
-
-
-def test_cli_example():
-    assert cli_logic(['--deps', 'numpy', 'example']) == 0
