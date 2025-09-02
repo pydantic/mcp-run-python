@@ -10,13 +10,13 @@ from mcp.client.stdio import stdio_client
 
 from .main import deno_args_prepare
 
-JsonData: TypeAlias = 'str| bool | int | float | None | list[JsonData] | dict[str, JsonData]'
+JsonData: TypeAlias = 'str | bool | int | float | None | list[JsonData] | dict[str, JsonData]'
 
 
 class RunSuccess(TypedDict):
     status: Literal['success']
     output: list[str]
-    returnValueJson: JsonData
+    return_value: JsonData
 
 
 class RunError(TypedDict):
