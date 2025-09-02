@@ -1,6 +1,6 @@
+import logging
 import shutil
 import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
@@ -8,6 +8,7 @@ from typing import Literal
 Mode = Literal['stdio', 'streamable_http', 'example']
 THIS_DIR = Path(__file__).parent
 NODE_MODULES = THIS_DIR / 'node_modules'
+logger = logging.getLogger(__name__)
 
 
 def deno_run_server(
@@ -18,11 +19,11 @@ def deno_run_server(
     install_log_handler: Callable[[str], None] | None = None,
 ):
     deno_install_deps(deps, install_log_handler)
-    print('Running mcp-run-python server...', file=sys.stderr)
+    logger.info('Running mcp-run-python server...')
     try:
         subprocess.run(('deno', *deno_run_args(mode, port=port, deps=deps)), cwd=THIS_DIR)
     except KeyboardInterrupt:  # pragma: no cover
-        print('Server stopped.', file=sys.stderr)
+        logger.warning('Server stopped.')
 
 
 def deno_args_prepare(
@@ -30,10 +31,11 @@ def deno_args_prepare(
     *,
     port: int | None = None,
     deps: list[str] | None = None,
+    return_mode: Literal['json', 'xml'] = 'xml',
     install_log_handler: Callable[[str], None] | None = None,
 ) -> list[str]:
     deno_install_deps(deps, install_log_handler)
-    return deno_run_args(mode, port=port, deps=deps)
+    return deno_run_args(mode, port=port, deps=deps, return_mode=return_mode)
 
 
 def deno_install_deps(
@@ -41,10 +43,10 @@ def deno_install_deps(
     install_log_handler: Callable[[str], None] | None = None,
 ):
     if NODE_MODULES.exists():
-        print('Deleting existing dependencies in node_modules...', file=sys.stderr)
+        logger.debug('Deleting existing dependencies in node_modules...')
         shutil.rmtree(NODE_MODULES)
 
-    print(f'Installing dependencies {deps}...', file=sys.stderr)
+    logger.debug('Installing dependencies %s...', deps)
     args = 'deno', *deno_install_args(deps)
     p = subprocess.run(args, cwd=THIS_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if install_log_handler is not None:
@@ -66,7 +68,13 @@ def deno_install_args(deps: list[str] | None = None) -> list[str]:
     return args
 
 
-def deno_run_args(mode: Mode, *, port: int | None = None, deps: list[str] | None = None) -> list[str]:
+def deno_run_args(
+    mode: Mode,
+    *,
+    port: int | None = None,
+    deps: list[str] | None = None,
+    return_mode: Literal['json', 'xml'] = 'xml',
+) -> list[str]:
     args = [
         'run',
         '-N',
@@ -74,6 +82,7 @@ def deno_run_args(mode: Mode, *, port: int | None = None, deps: list[str] | None
         '--node-modules-dir=auto',
         str(THIS_DIR / 'deno/main.ts'),
         mode,
+        f'--return-mode={return_mode}',
     ]
     if deps is not None:
         args.append(f'--deps={",".join(deps)}')

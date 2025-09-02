@@ -1,4 +1,4 @@
-/* eslint @typescript-eslint/no-explicit-any: off */
+// deno-lint-ignore-file no-explicit-any
 import { loadPyodide } from 'pyodide'
 import { preparePythonCode } from './prepareEnvCode.ts'
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
@@ -15,7 +15,6 @@ export async function runCode(
 ): Promise<RunSuccess | RunError> {
   // remove once we can upgrade to pyodide 0.27.7 and console.log is no longer used.
   const realConsoleLog = console.log
-  // deno-lint-ignore no-explicit-any
   console.log = (...args: any[]) => log('debug', args.join(' '))
 
   const output: string[] = []
@@ -130,6 +129,17 @@ export function asXml(runResult: RunSuccess | RunError): string {
   return xml.join('\n')
 }
 
+export function asJson(runResult: RunSuccess | RunError): string {
+  const { status, output } = runResult
+  const json: Record<string, any> = { status, output }
+  if (runResult.status == 'success') {
+    json.return_value = JSON.parse(runResult.returnValueJson || 'null')
+  } else {
+    json.error = runResult.error
+  }
+  return JSON.stringify(json)
+}
+
 function escapeClosing(closingTag: string): (str: string) => string {
   const regex = new RegExp(`</?\\s*${closingTag}(?:.*?>)?`, 'gi')
   const onMatch = (match: string) => {
@@ -138,7 +148,6 @@ function escapeClosing(closingTag: string): (str: string) => string {
   return (str) => str.replace(regex, onMatch)
 }
 
-// deno-lint-ignore no-explicit-any
 function formatError(err: any): string {
   let errStr = err.toString()
   errStr = errStr.replace(/^PythonError: +/, '')
@@ -160,6 +169,5 @@ interface PrepareError {
 }
 interface PreparePyEnv {
   prepare_env: (files: CodeFile[]) => Promise<PrepareSuccess | PrepareError>
-  // deno-lint-ignore no-explicit-any
   dump_json: (value: any) => string | null
 }
