@@ -18,7 +18,7 @@ a
 
 
 async def main():
-    async with code_sandbox(dependencies=['numpy'], log_handler=log_handler, logging_level='debug') as sandbox:
+    async with code_sandbox(dependencies=['numpy'], log_handler=log_handler) as sandbox:
         print('running code')
         result = await sandbox.eval(code)
         print(f'{result["status"].title()}:')
