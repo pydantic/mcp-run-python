@@ -86,14 +86,17 @@ The code will be executed with Python 3.12.
     return {}
   })
 
-  server.tool(
+  server.registerTool(
     'run_python_code',
-    toolDescription,
     {
-      python_code: z.string().describe('Python code to run'),
-      global_variables: z.record(z.string(), z.any()).default({}).describe(
-        'Map of global variables in context when the code is executed',
-      ),
+      title: 'Run Python code',
+      description: toolDescription,
+      inputSchema: {
+        python_code: z.string().describe('Python code to run'),
+        global_variables: z.record(z.string(), z.any()).default({}).describe(
+          'Map of global variables in context when the code is executed',
+        ),
+      },
     },
     async ({ python_code, global_variables }: { python_code: string; global_variables: Record<string, any> }) => {
       const logPromises: Promise<void>[] = []
