@@ -160,8 +160,6 @@ x=4
 <status>run-error</status>
 <error>
 Traceback (most recent call last):
-    ...<9 lines>...
-    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     print(unknown)
           ^^^^^^^

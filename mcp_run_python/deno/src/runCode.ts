@@ -199,7 +199,7 @@ function formatError(err: any): string {
   errStr = errStr.replace(/^PythonError: +/, '')
   // remove frames from inside pyodide
   errStr = errStr.replace(
-    / {2}File "\/lib\/python\d+\.zip\/_pyodide\/.*\n {4}.*\n(?: {4,}\^+\n)?/g,
+    / {2}File "\/lib\/python\d+\.zip\/_pyodide\/.*\n {4}.*\n(?: {4}.*\n)*/g,
     '',
   )
   return errStr

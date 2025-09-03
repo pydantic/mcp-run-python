@@ -71,8 +71,6 @@ class Foobar:
                     'output': [],
                     'error': """\
 Traceback (most recent call last):
-    ...<9 lines>...
-    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     print(unknown)
           ^^^^^^^
@@ -81,6 +79,44 @@ NameError: name 'unknown' is not defined
                 }
             ),
             id='print-error',
+        ),
+        pytest.param(
+            [],
+            """\
+def foo():
+    1 / 0
+
+def bar():
+    foo()
+
+def baz():
+    bar()
+
+baz()""",
+            {},
+            snapshot(
+                {
+                    'status': 'run-error',
+                    'output': [],
+                    'error': """\
+Traceback (most recent call last):
+  File "main.py", line 10, in <module>
+    baz()
+    ~~~^^
+  File "main.py", line 8, in baz
+    bar()
+    ~~~^^
+  File "main.py", line 5, in bar
+    foo()
+    ~~~^^
+  File "main.py", line 2, in foo
+    1 / 0
+    ~~^~~
+ZeroDivisionError: division by zero
+""",
+                }
+            ),
+            id='traceback',
         ),
         pytest.param(
             ['numpy'],
@@ -127,8 +163,6 @@ async def test_multiple_sandboxes():
                         'output': [],
                         'error': """\
 Traceback (most recent call last):
-    ...<9 lines>...
-    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     import numpy
 ModuleNotFoundError: No module named 'numpy'
