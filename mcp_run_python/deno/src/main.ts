@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-explicit-any
 /// <reference types="npm:@types/node@22.12.0" />
 
 import './polyfill.ts'
@@ -88,17 +89,23 @@ The code will be executed with Python 3.12.
   server.tool(
     'run_python_code',
     toolDescription,
-    { python_code: z.string().describe('Python code to run') },
-    async ({ python_code }: { python_code: string }) => {
+    {
+      python_code: z.string().describe('Python code to run'),
+      global_variables: z.record(z.string(), z.any()).default({}).describe(
+        'Map of global variables in context when the code is executed',
+      ),
+    },
+    async ({ python_code, global_variables }: { python_code: string; global_variables: Record<string, any> }) => {
       const logPromises: Promise<void>[] = []
       const result = await runCode.run(
         deps,
-        { name: 'main.py', content: python_code },
         (level, data) => {
           if (LogLevels.indexOf(level) >= LogLevels.indexOf(setLogLevel)) {
             logPromises.push(server.server.sendLoggingMessage({ level, data }))
           }
         },
+        { name: 'main.py', content: python_code },
+        global_variables,
       )
       await Promise.all(logPromises)
       return {
@@ -122,7 +129,6 @@ function httpGetUrl(req: http.IncomingMessage): URL {
 function httpGetBody(req: http.IncomingMessage): Promise<JSON> {
   // https://nodejs.org/en/learn/modules/anatomy-of-an-http-transaction#request-body
   return new Promise((resolve) => {
-    // deno-lint-ignore no-explicit-any
     const bodyParts: any[] = []
     let body
     req.on('data', (chunk) => {
@@ -255,7 +261,6 @@ async function installDeps(deps: string[]) {
   const runCode = new RunCode()
   const result = await runCode.run(
     deps,
-    undefined,
     (level, data) => console.error(`${level}|${data}`),
   )
   if (result.status !== 'success') {
@@ -280,9 +285,9 @@ a
   const runCode = new RunCode()
   const result = await runCode.run(
     deps,
-    { name: 'example.py', content: code },
     // use warn to avoid recursion since console.log is patched in runCode
     (level, data) => console.warn(`${level}: ${data}`),
+    { name: 'example.py', content: code },
   )
   console.log('Tool return value:')
   console.log(asXml(result))
