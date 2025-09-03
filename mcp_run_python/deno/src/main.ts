@@ -11,6 +11,7 @@ import { type LoggingLevel, SetLevelRequestSchema } from '@modelcontextprotocol/
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
+import { registerFileFunctions } from './files.ts'
 import { asJson, asXml, RunCode } from './runCode.ts'
 import { Buffer } from 'node:buffer'
 
@@ -44,7 +45,7 @@ export async function main() {
     `\
 Invalid arguments: ${args.join(' ')}
 
-Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|example]
+Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|noop]
 
 options:
 --port <port>             Port to run the HTTP server on (default: 3001)
@@ -58,25 +59,13 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(deps: string[], returnMode: string, mountFS: boolean): McpServer {
+function createServer(
+  deps: string[],
+  returnMode: string,
+  mountFS: boolean,
+  transport?: StdioServerTransport,
+): McpServer {
   const runCode = new RunCode()
-
-  // Create storage directory
-  let extraDescription = ''
-  if (mountFS) {
-    const rootDir = Deno.makeTempDirSync()
-    runCode.rootDir = rootDir
-    const signalHandler = () => {
-      Deno.removeSync(rootDir, { recursive: true })
-      Deno.exit()
-    }
-    Deno.addSignalListener('SIGINT', signalHandler)
-    Deno.addSignalListener('SIGTERM', signalHandler)
-    extraDescription = `
-    You can read and create persisted files at ~/storage/.
-    `
-    console.log(`File persistence at: ${rootDir}`)
-  }
 
   const server = new McpServer(
     {
@@ -92,6 +81,28 @@ function createServer(deps: string[], returnMode: string, mountFS: boolean): Mcp
       },
     },
   )
+
+  // Create storage directory
+  let extraDescription = ''
+  if (mountFS) {
+    const rootDir = Deno.makeTempDirSync({ prefix: 'mcp_run_python' })
+    runCode.rootDir = rootDir
+    const signalHandler = () => {
+      Deno.removeSync(rootDir, { recursive: true })
+      Deno.exit()
+    }
+    Deno.addSignalListener('SIGINT', signalHandler)
+    Deno.addSignalListener('SIGTERM', signalHandler)
+    extraDescription = `
+    You can read and create persisted files at ~/storage/.
+    `
+    registerFileFunctions(server, rootDir)
+    if (transport) {
+      transport.onclose = () => {
+        Deno.removeSync(rootDir, { recursive: true })
+      }
+    }
+  }
 
   const toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
 
@@ -268,8 +279,8 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string, mou
  * Run the MCP server using the Stdio transport.
  */
 async function runStdio(deps: string[], returnMode: string, mountFS: boolean) {
-  const mcpServer = createServer(deps, returnMode, mountFS)
   const transport = new StdioServerTransport()
+  const mcpServer = createServer(deps, returnMode, mountFS, transport)
   await mcpServer.connect(transport)
 }
 

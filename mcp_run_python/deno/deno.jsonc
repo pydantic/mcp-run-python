@@ -21,8 +21,7 @@
     "@std/fs": "jsr:@std/fs@^1.0.19",
     "@std/media-types": "jsr:@std/media-types@^1.1.0",
     "@std/path": "jsr:@std/path@^1.1.2",
-    // do NOT upgrade above this version until there is a workaround for https://github.com/pyodide/pyodide/pull/5621
-    "pyodide": "npm:pyodide@0.27.6",
+    "pyodide": "npm:pyodide@^0.28.2",
     "zod": "npm:zod@^3.25.76"
   },
   "fmt": {

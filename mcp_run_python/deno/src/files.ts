@@ -6,13 +6,6 @@ import z from 'zod'
 import { decodeBase64, encodeBase64 } from '@std/encoding/base64'
 
 /**
- * Returns the temporary directory in the local filesystem for file persistence.
- */
-export function createRootDir(): string {
-  return Deno.makeTempDirSync({ prefix: 'mcp_run_python' })
-}
-
-/**
  * Register file related functions to the MCP server.
  * @param server The MCP Server
  * @param rootDir Directory in the local file system to read/write to.
@@ -25,8 +18,8 @@ export function registerFileFunctions(server: McpServer, rootDir: string) {
     inputSchema: {
       type: z.union([z.literal('text'), z.literal('bytes')]),
       filename: z.string().describe('Name of the file to write.'),
-      text: z.nullable(z.string().describe('Text content of the file, if the type is "text".')),
-      blob: z.nullable(z.string().describe('Base 64 encoded content of the file, if the type is "bytes".')),
+      text: z.optional(z.string().describe('Text content of the file, if the type is "text".')),
+      blob: z.optional(z.string().describe('Base 64 encoded content of the file, if the type is "bytes".')),
     },
   }, async ({ type, filename, text, blob }) => {
     const absPath = path.join(rootDir, filename)
