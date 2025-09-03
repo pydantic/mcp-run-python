@@ -19,17 +19,18 @@ const VERSION = '0.0.13'
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
+    boolean: ['mount-fs'],
     string: ['deps', 'return-mode', 'port'],
-    default: { port: '3001', 'return-mode': 'xml' },
+    default: { port: '3001', 'return-mode': 'xml', 'mount-fs': false },
   })
   const deps = flags.deps?.split(',') ?? []
   if (args.length >= 1) {
     if (args[0] === 'stdio') {
-      await runStdio(deps, flags['return-mode'])
+      await runStdio(deps, flags['return-mode'], flags['mount-fs'])
       return
     } else if (args[0] === 'streamable_http') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'])
+      runStreamableHttp(port, deps, flags['return-mode'], flags['mount-fs'])
       return
     } else if (args[0] === 'example') {
       await example(deps)
@@ -43,12 +44,13 @@ export async function main() {
     `\
 Invalid arguments: ${args.join(' ')}
 
-Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|noop]
+Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|example]
 
 options:
 --port <port>             Port to run the HTTP server on (default: 3001)
 --deps <deps>             Comma separated list of dependencies to install
---return-mode <xml/json>  Return mode for output data (default: xml)`,
+--return-mode <xml/json>  Return mode for output data (default: xml)
+--mount-fs                Activate file persistence in sandbox`,
   )
   Deno.exit(1)
 }
@@ -56,8 +58,26 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(deps: string[], returnMode: string): McpServer {
+function createServer(deps: string[], returnMode: string, mountFS: boolean): McpServer {
   const runCode = new RunCode()
+
+  // Create storage directory
+  let extraDescription = ''
+  if (mountFS) {
+    const rootDir = Deno.makeTempDirSync()
+    runCode.rootDir = rootDir
+    const signalHandler = () => {
+      Deno.removeSync(rootDir, { recursive: true })
+      Deno.exit()
+    }
+    Deno.addSignalListener('SIGINT', signalHandler)
+    Deno.addSignalListener('SIGTERM', signalHandler)
+    extraDescription = `
+    You can read and create persisted files at ~/storage/.
+    `
+    console.log(`File persistence at: ${rootDir}`)
+  }
+
   const server = new McpServer(
     {
       name: 'MCP Run Python',
@@ -66,6 +86,8 @@ function createServer(deps: string[], returnMode: string): McpServer {
     {
       instructions: 'Call the "run_python_code" tool with the Python code to run.',
       capabilities: {
+        resources: {},
+        tools: {},
         logging: {},
       },
     },
@@ -76,7 +98,7 @@ function createServer(deps: string[], returnMode: string): McpServer {
 The code may be async, and the value on the last line will be returned as the return value.
 
 The code will be executed with Python 3.12.
-`
+` + extraDescription
 
   let setLogLevel: LoggingLevel = 'emergency'
 
@@ -85,10 +107,13 @@ The code will be executed with Python 3.12.
     return {}
   })
 
-  server.tool(
+  server.registerTool(
     'run_python_code',
-    toolDescription,
-    { python_code: z.string().describe('Python code to run') },
+    {
+      title: 'Run python code',
+      description: toolDescription,
+      inputSchema: { python_code: z.string().describe('Python code to run') },
+    },
     async ({ python_code }: { python_code: string }) => {
       const logPromises: Promise<void>[] = []
       const result = await runCode.run(
@@ -157,9 +182,9 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[], returnMode: string) {
+function runStreamableHttp(port: number, deps: string[], returnMode: string, mountFS: boolean) {
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
-  const mcpServer = createServer(deps, returnMode)
+  const mcpServer = createServer(deps, returnMode, mountFS)
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
   const server = http.createServer(async (req, res) => {
@@ -242,8 +267,8 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio(deps: string[], returnMode: string) {
-  const mcpServer = createServer(deps, returnMode)
+async function runStdio(deps: string[], returnMode: string, mountFS: boolean) {
+  const mcpServer = createServer(deps, returnMode, mountFS)
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }
