@@ -215,5 +215,5 @@ interface PrepareError {
 }
 interface PreparePyEnv {
   prepare_env: (files: CodeFile[]) => Promise<PrepareSuccess | PrepareError>
-  dump_json: (value: any, alwasy_return_json: boolean) => string | null
+  dump_json: (value: any, always_return_json: boolean) => string | null
 }
