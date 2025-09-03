@@ -71,6 +71,8 @@ class Foobar:
                     'output': [],
                     'error': """\
 Traceback (most recent call last):
+    ...<9 lines>...
+    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     print(unknown)
           ^^^^^^^
@@ -86,6 +88,13 @@ NameError: name 'unknown' is not defined
             {},
             snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
             id='return-numpy-success',
+        ),
+        pytest.param(
+            [],
+            'import sys\nsys.version_info',
+            {},
+            snapshot({'status': 'success', 'output': [], 'return_value': [3, 13, 2, 'final', 0]}),
+            id='python-version',
         ),
     ],
 )
@@ -118,6 +127,8 @@ async def test_multiple_sandboxes():
                         'output': [],
                         'error': """\
 Traceback (most recent call last):
+    ...<9 lines>...
+    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     import numpy
 ModuleNotFoundError: No module named 'numpy'
@@ -145,7 +156,7 @@ async def test_print_handler():
     assert next(((level, msg) for level, msg in logs if level == 'debug'), None) == snapshot(
         (
             'debug',
-            'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+            'Loading annotated-types, micropip, pydantic, pydantic_core, typing-extensions',
         ),
     )
     assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))
