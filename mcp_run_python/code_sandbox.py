@@ -2,7 +2,7 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, TypedDict
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from mcp import ClientSession, StdioServerParameters, types as mcp_types
 from mcp.client.stdio import stdio_client
@@ -28,8 +28,21 @@ class RunError(TypedDict):
 class CodeSandbox:
     _session: ClientSession
 
-    async def eval(self, code: str) -> RunSuccess | RunError:
-        result = await self._session.call_tool('run_python_code', {'python_code': code})
+    async def eval(
+        self,
+        code: str,
+        globals: dict[str, Any] | None = None,
+    ) -> RunSuccess | RunError:
+        """Run code in the sandbox.
+
+        Args:
+            code: Python code to run.
+            globals: Dictionary of global variables in context when the code is executed
+        """
+        args: dict[str, Any] = {'python_code': code}
+        if globals is not None:
+            args['global_variables'] = globals
+        result = await self._session.call_tool('run_python_code', args)
         content_block = result.content[0]
         if content_block.type == 'text':
             return json.loads(content_block.text)
@@ -44,7 +57,7 @@ async def code_sandbox(
     log_handler: LogHandler | None = None,
     allow_networking: bool = True,
 ) -> AsyncIterator['CodeSandbox']:
-    """Run code in a secure sandbox.
+    """Create a secure sandbox.
 
     Args:
         dependencies: A list of dependencies to be installed.

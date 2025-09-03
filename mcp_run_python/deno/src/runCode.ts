@@ -23,8 +23,9 @@ export class RunCode {
 
   async run(
     dependencies: string[],
-    file: CodeFile | undefined,
     log: (level: LoggingLevel, data: string) => void,
+    file?: CodeFile,
+    globals?: Record<string, any>,
   ): Promise<RunSuccess | RunError> {
     // remove once we can upgrade to pyodide 0.27.7 and console.log is no longer used.
     const realConsoleLog = console.log
@@ -60,7 +61,7 @@ export class RunCode {
     } else if (file) {
       try {
         const rawValue = await pyodide.runPythonAsync(file.content, {
-          globals: pyodide.toPy({ __name__: '__main__' }),
+          globals: pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
           filename: file.name,
         })
         runResult = {

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -8,24 +9,62 @@ from mcp_run_python import code_sandbox
 pytestmark = pytest.mark.anyio
 
 
+@dataclass
+class Foobar:
+    a: int
+    b: str
+    c: bytes
+
+
 @pytest.mark.parametrize(
-    'deps,code,expected',
+    'deps,code,locals,expected',
     [
         pytest.param(
             [],
             'a = 1\na + 1',
+            {},
             snapshot({'status': 'success', 'output': [], 'return_value': 2}),
             id='return-value-success',
         ),
         pytest.param(
             [],
             'print(123)',
+            {},
             snapshot({'status': 'success', 'output': ['123'], 'return_value': None}),
             id='print-success',
         ),
         pytest.param(
             [],
+            'a',
+            {'a': [1, 2, 3]},
+            snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
+            id='access-local-variables',
+        ),
+        pytest.param(
+            [],
+            'a + b',
+            {'a': 4, 'b': 5},
+            snapshot({'status': 'success', 'output': [], 'return_value': 9}),
+            id='multiple-locals',
+        ),
+        pytest.param(
+            [],
+            'print(f)',
+            {'f': Foobar(1, '2', b'3')},
+            snapshot({'status': 'success', 'output': ["{'a': 1, 'b': '2', 'c': '3'}"], 'return_value': None}),
+            id='print-complex-local',
+        ),
+        pytest.param(
+            [],
+            'f',
+            {'f': Foobar(1, '2', b'3')},
+            snapshot({'status': 'success', 'output': [], 'return_value': {'a': 1, 'b': '2', 'c': '3'}}),
+            id='return-complex-local',
+        ),
+        pytest.param(
+            [],
             'print(unknown)',
+            {},
             snapshot(
                 {
                     'status': 'run-error',
@@ -44,14 +83,15 @@ NameError: name 'unknown' is not defined
         pytest.param(
             ['numpy'],
             'import numpy\nnumpy.array([1, 2, 3])',
+            {},
             snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
             id='return-numpy-success',
         ),
     ],
 )
-async def test_sandbox(deps: list[str], code: str, expected: Any):
+async def test_sandbox(deps: list[str], code: str, locals: dict[str, Any], expected: Any):
     async with code_sandbox(dependencies=deps) as sandbox:
-        result = await sandbox.eval(code)
+        result = await sandbox.eval(code, locals)
         assert result == expected
 
 

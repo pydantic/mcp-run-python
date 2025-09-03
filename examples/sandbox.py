@@ -10,7 +10,7 @@ def log_handler(level: str, message: str):
 
 code = """
 import numpy, asyncio
-a = numpy.array([1, 2, 3])
+a = numpy.array(thing)
 print(a)
 await asyncio.sleep(1)
 a
@@ -20,7 +20,7 @@ a
 async def main():
     async with code_sandbox(dependencies=['numpy'], log_handler=log_handler) as sandbox:
         print('running code')
-        result = await sandbox.eval(code)
+        result = await sandbox.eval(code, {'thing': [1, 2, 3]})
         print(f'{result["status"].title()}:')
         if result['status'] == 'success':
             print(result['return_value'])

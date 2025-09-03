@@ -82,7 +82,15 @@ async def test_list_tools(run_mcp_session: Callable[[list[str]], AbstractAsyncCo
         assert tool.description
         assert tool.description.startswith('Tool to execute Python code and return stdout, stderr, and return value.')
         assert tool.inputSchema['properties'] == snapshot(
-            {'python_code': {'type': 'string', 'description': 'Python code to run'}}
+            {
+                'python_code': {'type': 'string', 'description': 'Python code to run'},
+                'global_variables': {
+                    'type': 'object',
+                    'additionalProperties': {},
+                    'default': {},
+                    'description': 'Map of global variables in context when the code is executed',
+                },
+            }
         )
 
 
