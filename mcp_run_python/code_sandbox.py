@@ -41,7 +41,7 @@ class CodeSandbox:
         """
         args: dict[str, Any] = {'python_code': code}
         if globals is not None:
-            args['globals'] = globals
+            args['global_variables'] = globals
         result = await self._session.call_tool('run_python_code', args)
         content_block = result.content[0]
         if content_block.type == 'text':
