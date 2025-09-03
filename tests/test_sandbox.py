@@ -32,6 +32,8 @@ pytestmark = pytest.mark.anyio
                     'output': [],
                     'error': """\
 Traceback (most recent call last):
+    ...<9 lines>...
+    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     print(unknown)
           ^^^^^^^
@@ -78,6 +80,8 @@ async def test_multiple_sandboxes():
                         'output': [],
                         'error': """\
 Traceback (most recent call last):
+    ...<9 lines>...
+    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     import numpy
 ModuleNotFoundError: No module named 'numpy'
@@ -105,7 +109,7 @@ async def test_print_handler():
     assert next(((level, msg) for level, msg in logs if level == 'debug'), None) == snapshot(
         (
             'debug',
-            'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+            'loadPackage: Loading annotated-types, micropip, pydantic, pydantic_core, typing-extensions',
         ),
     )
     assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))
