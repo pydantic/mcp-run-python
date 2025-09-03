@@ -31,17 +31,17 @@ class CodeSandbox:
     async def eval(
         self,
         code: str,
-        global_variables: dict[str, Any] | None = None,
+        globals: dict[str, Any] | None = None,
     ) -> RunSuccess | RunError:
         """Run code in the sandbox.
 
         Args:
             code: Python code to run.
-            global_variables: Dictionary of global variables in context when the code is executed
+            globals: Dictionary of global variables in context when the code is executed
         """
         args: dict[str, Any] = {'python_code': code}
-        if global_variables is not None:
-            args['global_variables'] = global_variables
+        if globals is not None:
+            args['globals'] = globals
         result = await self._session.call_tool('run_python_code', args)
         content_block = result.content[0]
         if content_block.type == 'text':
