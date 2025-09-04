@@ -81,15 +81,21 @@ async def test_list_tools(run_mcp_session: Callable[[list[str]], AbstractAsyncCo
         assert tool.name == 'run_python_code'
         assert tool.description
         assert tool.description.startswith('Tool to execute Python code and return stdout, stderr, and return value.')
-        assert tool.inputSchema['properties'] == snapshot(
+        assert tool.inputSchema == snapshot(
             {
-                'python_code': {'type': 'string', 'description': 'Python code to run'},
-                'global_variables': {
-                    'type': 'object',
-                    'additionalProperties': {},
-                    'default': {},
-                    'description': 'Map of global variables in context when the code is executed',
+                'type': 'object',
+                'properties': {
+                    'python_code': {'type': 'string', 'description': 'Python code to run'},
+                    'global_variables': {
+                        'type': 'object',
+                        'additionalProperties': {},
+                        'default': {},
+                        'description': 'Map of global variables in context when the code is executed',
+                    },
                 },
+                'required': ['python_code'],
+                'additionalProperties': False,
+                '$schema': 'http://json-schema.org/draft-07/schema#',
             }
         )
 
