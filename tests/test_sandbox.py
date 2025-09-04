@@ -17,7 +17,7 @@ class Foobar:
 
 
 @pytest.mark.parametrize(
-    'deps,code,locals,expected',
+    'deps,code,globals,expected',
     [
         pytest.param(
             [],
@@ -25,6 +25,13 @@ class Foobar:
             {},
             snapshot({'status': 'success', 'output': [], 'return_value': 2}),
             id='return-value-success',
+        ),
+        pytest.param(
+            [],
+            '"foobar"',
+            {},
+            snapshot({'status': 'success', 'output': [], 'return_value': 'foobar'}),
+            id='return-string',
         ),
         pytest.param(
             [],
@@ -38,28 +45,35 @@ class Foobar:
             'a',
             {'a': [1, 2, 3]},
             snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
-            id='access-local-variables',
+            id='access-global-variables',
         ),
         pytest.param(
             [],
             'a + b',
             {'a': 4, 'b': 5},
             snapshot({'status': 'success', 'output': [], 'return_value': 9}),
-            id='multiple-locals',
+            id='multiple-globals',
         ),
         pytest.param(
             [],
             'print(f)',
             {'f': Foobar(1, '2', b'3')},
             snapshot({'status': 'success', 'output': ["{'a': 1, 'b': '2', 'c': '3'}"], 'return_value': None}),
-            id='print-complex-local',
+            id='print-complex-global',
         ),
         pytest.param(
             [],
             'f',
             {'f': Foobar(1, '2', b'3')},
             snapshot({'status': 'success', 'output': [], 'return_value': {'a': 1, 'b': '2', 'c': '3'}}),
-            id='return-complex-local',
+            id='return-complex-global',
+        ),
+        pytest.param(
+            [],
+            'f',
+            {'f': Foobar(1, '2', b'3')},
+            snapshot({'status': 'success', 'output': [], 'return_value': {'a': 1, 'b': '2', 'c': '3'}}),
+            id='return-complex-global',
         ),
         pytest.param(
             [],
@@ -134,9 +148,9 @@ ZeroDivisionError: division by zero
         ),
     ],
 )
-async def test_sandbox(deps: list[str], code: str, locals: dict[str, Any], expected: Any):
+async def test_sandbox(deps: list[str], code: str, globals: dict[str, Any], expected: Any):
     async with code_sandbox(dependencies=deps) as sandbox:
-        result = await sandbox.eval(code, locals)
+        result = await sandbox.eval(code, globals)
         assert result == expected
 
 
