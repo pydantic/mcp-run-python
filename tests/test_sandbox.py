@@ -81,11 +81,56 @@ NameError: name 'unknown' is not defined
             id='print-error',
         ),
         pytest.param(
+            [],
+            """\
+def foo():
+    1 / 0
+
+def bar():
+    foo()
+
+def baz():
+    bar()
+
+baz()""",
+            {},
+            snapshot(
+                {
+                    'status': 'run-error',
+                    'output': [],
+                    'error': """\
+Traceback (most recent call last):
+  File "main.py", line 10, in <module>
+    baz()
+    ~~~^^
+  File "main.py", line 8, in baz
+    bar()
+    ~~~^^
+  File "main.py", line 5, in bar
+    foo()
+    ~~~^^
+  File "main.py", line 2, in foo
+    1 / 0
+    ~~^~~
+ZeroDivisionError: division by zero
+""",
+                }
+            ),
+            id='traceback',
+        ),
+        pytest.param(
             ['numpy'],
             'import numpy\nnumpy.array([1, 2, 3])',
             {},
             snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
             id='return-numpy-success',
+        ),
+        pytest.param(
+            [],
+            'import sys\nsys.version_info',
+            {},
+            snapshot({'status': 'success', 'output': [], 'return_value': [3, 13, 2, 'final', 0]}),
+            id='python-version',
         ),
     ],
 )
@@ -145,7 +190,7 @@ async def test_print_handler():
     assert next(((level, msg) for level, msg in logs if level == 'debug'), None) == snapshot(
         (
             'debug',
-            'loadPackage: Loading annotated-types, micropip, packaging, pydantic, pydantic_core, typing-extensions',
+            'Loading annotated-types, micropip, pydantic, pydantic_core, typing-extensions',
         ),
     )
     assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))

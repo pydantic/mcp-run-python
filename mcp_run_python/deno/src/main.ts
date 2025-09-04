@@ -76,7 +76,7 @@ function createServer(deps: string[], returnMode: string): McpServer {
 
 The code may be async, and the value on the last line will be returned as the return value.
 
-The code will be executed with Python 3.12.
+The code will be executed with Python 3.13.
 `
 
   let setLogLevel: LoggingLevel = 'emergency'
@@ -109,6 +109,7 @@ The code will be executed with Python 3.12.
         },
         { name: 'main.py', content: python_code },
         global_variables,
+        returnMode !== 'xml',
       )
       await Promise.all(logPromises)
       return {

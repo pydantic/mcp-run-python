@@ -26,11 +26,8 @@ export class RunCode {
     log: (level: LoggingLevel, data: string) => void,
     file?: CodeFile,
     globals?: Record<string, any>,
+    alwaysReturnJson: boolean = false,
   ): Promise<RunSuccess | RunError> {
-    // remove once we can upgrade to pyodide 0.27.7 and console.log is no longer used.
-    const realConsoleLog = console.log
-    console.log = (...args: any[]) => log('debug', args.join(' '))
-
     let pyodide: PyodideInterface
     let sys: any
     let prepareStatus: PrepareSuccess | PrepareError | undefined
@@ -51,9 +48,8 @@ export class RunCode {
       prepareStatus = prep.prepareStatus
     }
 
-    let runResult: RunSuccess | RunError
     if (prepareStatus && prepareStatus.kind == 'error') {
-      runResult = {
+      return {
         status: 'install-error',
         output: this.takeOutput(sys),
         error: prepareStatus.message,
@@ -64,27 +60,25 @@ export class RunCode {
           globals: pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
           filename: file.name,
         })
-        runResult = {
+        return {
           status: 'success',
           output: this.takeOutput(sys),
-          returnValueJson: preparePyEnv.dump_json(rawValue),
+          returnValueJson: preparePyEnv.dump_json(rawValue, alwaysReturnJson),
         }
       } catch (err) {
-        runResult = {
+        return {
           status: 'run-error',
           output: this.takeOutput(sys),
           error: formatError(err),
         }
       }
     } else {
-      runResult = {
+      return {
         status: 'success',
         output: this.takeOutput(sys),
         returnValueJson: null,
       }
     }
-    console.log = realConsoleLog
-    return runResult
   }
 
   async prepEnv(
@@ -107,9 +101,9 @@ export class RunCode {
     pyodide.loadPackage = (pkgs, options) =>
       origLoadPackage(pkgs, {
         // stop pyodide printing to stdout/stderr
-        messageCallback: (msg: string) => log('debug', `loadPackage: ${msg}`),
+        messageCallback: (msg: string) => log('debug', msg),
         errorCallback: (msg: string) => {
-          log('error', `loadPackage: ${msg}`)
+          log('error', msg)
           this.output.push(`install error: ${msg}`)
         },
         ...options,
@@ -205,7 +199,7 @@ function formatError(err: any): string {
   errStr = errStr.replace(/^PythonError: +/, '')
   // remove frames from inside pyodide
   errStr = errStr.replace(
-    / {2}File "\/lib\/python\d+\.zip\/_pyodide\/.*\n {4}.*\n(?: {4,}\^+\n)?/g,
+    / {2}File "\/lib\/python\d+\.zip\/_pyodide\/.*\n {4}.*\n(?: {4}.*\n)*/g,
     '',
   )
   return errStr
@@ -221,5 +215,5 @@ interface PrepareError {
 }
 interface PreparePyEnv {
   prepare_env: (files: CodeFile[]) => Promise<PrepareSuccess | PrepareError>
-  dump_json: (value: any) => string | null
+  dump_json: (value: any, always_return_json: boolean) => string | null
 }

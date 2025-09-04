@@ -49,12 +49,12 @@ async def prepare_env(dependencies: list[str] | None) -> Success | Error:
     return Success(dependencies=dependencies)
 
 
-def dump_json(value: Any) -> str | None:
+def dump_json(value: Any, always_return_json: bool) -> str | None:
     from pydantic_core import to_json
 
     if value is None:
         return None
-    if isinstance(value, str):
+    if isinstance(value, str) and not always_return_json:
         return value
     else:
         return to_json(value, indent=2, fallback=_json_fallback).decode()
