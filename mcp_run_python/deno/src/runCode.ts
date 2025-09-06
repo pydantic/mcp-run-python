@@ -21,6 +21,8 @@ export class RunCode {
   private preparePyEnv?: PreparePyEnv
   private prepPromise?: Promise<PrepResult>
 
+  public rootDir?: string
+
   async run(
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
@@ -95,6 +97,19 @@ export class RunCode {
         this.output.push(msg)
       },
     })
+
+    // Mount file system
+    if (this.rootDir) {
+      const mountDir = '/home/pyodide/storage/'
+      // Ensure emscriptem directory is created
+      pyodide.FS.mkdirTree(mountDir)
+      // Mount local directory
+      pyodide.FS.mount(
+        pyodide.FS.filesystems.NODEFS,
+        { root: this.rootDir },
+        mountDir,
+      )
+    }
 
     // see https://github.com/pyodide/pyodide/discussions/5512
     const origLoadPackage = pyodide.loadPackage

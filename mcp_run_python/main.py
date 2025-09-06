@@ -26,6 +26,7 @@ def run_mcp_server(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    file_persistence: bool = False,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -36,6 +37,7 @@ def run_mcp_server(
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
+        file_persistence: Files stored in the `~/storage/` directory will be persisted between MCP runs.
     """
     with prepare_deno_env(
         mode,
@@ -44,6 +46,7 @@ def run_mcp_server(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        file_persistence=file_persistence,
     ) as env:
         if mode == 'streamable_http':
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
@@ -74,6 +77,7 @@ def prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    file_persistence: bool = False,
 ) -> Iterator[DenoEnv]:
     """Prepare the deno environment for running the mcp-run-python server with Deno.
 
@@ -89,6 +93,7 @@ def prepare_deno_env(
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether the prepared DenoEnv should allow networking when running code.
             Note that we always allow networking during environment initialization to install dependencies.
+        file_persistence: Files stored in the `~/storage/` directory will be persisted between MCP runs.
 
     Returns:
         Yields the deno environment details.
@@ -121,6 +126,7 @@ def prepare_deno_env(
             dependencies=dependencies,
             return_mode=return_mode,
             allow_networking=allow_networking,
+            file_persistence=file_persistence,
         )
         yield DenoEnv(cwd, args)
 
@@ -137,6 +143,7 @@ async def async_prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    file_persistence: bool = False,
 ) -> AsyncIterator[DenoEnv]:
     """Async variant of `prepare_deno_env`."""
     ct = await _asyncify(
@@ -147,6 +154,7 @@ async def async_prepare_deno_env(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        file_persistence=file_persistence,
     )
     try:
         yield await _asyncify(ct.__enter__)
@@ -176,12 +184,16 @@ def _deno_run_args(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
+    file_persistence: bool = False,
 ) -> list[str]:
     args = ['run']
     if allow_networking:
         args += ['--allow-net']
+    if file_persistence:
+        args += ['--allow-read=./node_modules,/tmp', '--allow-write=/tmp']
+    else:
+        args += ['--allow-read=./node_modules/']
     args += [
-        '--allow-read=./node_modules',
         '--node-modules-dir=auto',
         'src/main.ts',
         mode,
@@ -189,6 +201,8 @@ def _deno_run_args(
     ]
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
+    if file_persistence:
+        args += ['--mount-fs']
     if http_port is not None:
         if mode == 'streamable_http':
             args.append(f'--port={http_port}')

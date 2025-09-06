@@ -28,6 +28,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     )
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
+    parser.add_argument('--mount-fs', action='store_true', help='Activate file persistence.')
     parser.add_argument(
         'mode',
         choices=['stdio', 'streamable-http', 'example'],
@@ -53,6 +54,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             http_port=args.port,
             dependencies=deps,
             deps_log_handler=deps_log_handler,
+            file_persistence=args.mount_fs,
         )
         return return_code
     else:
