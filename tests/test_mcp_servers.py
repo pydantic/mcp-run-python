@@ -98,8 +98,22 @@ async def test_list_tools(run_mcp_session: SessionManagerFactory) -> None:
         assert tool.name == 'run_python_code'
         assert tool.description
         assert tool.description.startswith('Tool to execute Python code and return stdout, stderr, and return value.')
-        assert tool.inputSchema['properties'] == snapshot(
-            {'python_code': {'type': 'string', 'description': 'Python code to run'}}
+        assert tool.inputSchema == snapshot(
+            {
+                'type': 'object',
+                'properties': {
+                    'python_code': {'type': 'string', 'description': 'Python code to run'},
+                    'global_variables': {
+                        'type': 'object',
+                        'additionalProperties': {},
+                        'default': {},
+                        'description': 'Map of global variables in context when the code is executed',
+                    },
+                },
+                'required': ['python_code'],
+                'additionalProperties': False,
+                '$schema': 'http://json-schema.org/draft-07/schema#',
+            }
         )
 
 
@@ -169,8 +183,6 @@ x=4
 <status>run-error</status>
 <error>
 Traceback (most recent call last):
-    ...<9 lines>...
-    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     print(unknown)
           ^^^^^^^
@@ -369,9 +381,7 @@ async def test_install_run_python_code() -> None:
 
     async with async_prepare_deno_env('stdio', dependencies=['numpy'], deps_log_handler=logging_callback) as env:
         assert len(logs) >= 10
-        assert re.search(
-            r"loadPackage: Didn't find package numpy\S+?\.whl locally, attempting to load from", '\n'.join(logs)
-        )
+        assert re.search(r"debug: Didn't find package numpy\S+?\.whl locally, attempting to load from", '\n'.join(logs))
 
         server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
         async with stdio_client(server_params) as (read, write):

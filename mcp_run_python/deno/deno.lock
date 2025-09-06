@@ -12,8 +12,8 @@
     "npm:@modelcontextprotocol/sdk@^1.17.5": "1.17.5_express@5.1.0_zod@3.25.76",
     "npm:@types/node@*": "24.2.0",
     "npm:@types/node@22.12.0": "22.12.0",
-    "npm:pyodide@~0.28.2": "0.28.2",
-    "npm:zod@^3.25.76": "3.25.76"
+    "npm:pyodide@0.28.2": "0.28.2",
+    "npm:zod@^3.24.4": "3.25.76"
   },
   "jsr": {
     "@std/cli@1.0.21": {
@@ -571,8 +571,8 @@
       "jsr:@std/media-types@^1.1.0",
       "jsr:@std/path@^1.1.2",
       "npm:@modelcontextprotocol/sdk@^1.17.5",
-      "npm:pyodide@~0.28.2",
-      "npm:zod@^3.25.76"
+      "npm:pyodide@0.28.2",
+      "npm:zod@^3.24.4"
     ]
   }
 }

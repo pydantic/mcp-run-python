@@ -2,7 +2,7 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, TypedDict
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from mcp import ClientSession, StdioServerParameters, types as mcp_types
 from mcp.client.stdio import stdio_client
@@ -28,8 +28,21 @@ class RunError(TypedDict):
 class CodeSandbox:
     _session: ClientSession
 
-    async def eval(self, code: str) -> RunSuccess | RunError:
-        result = await self._session.call_tool('run_python_code', {'python_code': code})
+    async def eval(
+        self,
+        code: str,
+        globals: dict[str, Any] | None = None,
+    ) -> RunSuccess | RunError:
+        """Run code in the sandbox.
+
+        Args:
+            code: Python code to run.
+            globals: Dictionary of global variables in context when the code is executed
+        """
+        args: dict[str, Any] = {'python_code': code}
+        if globals is not None:
+            args['global_variables'] = globals
+        result = await self._session.call_tool('run_python_code', args)
         content_block = result.content[0]
         if content_block.type == 'text':
             return json.loads(content_block.text)
@@ -42,15 +55,13 @@ async def code_sandbox(
     *,
     dependencies: list[str] | None = None,
     log_handler: LogHandler | None = None,
-    logging_level: mcp_types.LoggingLevel | None = None,
     allow_networking: bool = True,
 ) -> AsyncIterator['CodeSandbox']:
-    """Run code in a secure sandbox.
+    """Create a secure sandbox.
 
     Args:
         dependencies: A list of dependencies to be installed.
         log_handler: A callback function to handle print statements when code is running.
-        logging_level: The logging level to use for the print handler, defaults to `info` if `log_handler` is provided.
         deps_log_handler: A callback function to run on log statements during initial install of dependencies.
         allow_networking: Whether to allow networking or not while executing python code.
     """
@@ -75,5 +86,5 @@ async def code_sandbox(
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write, logging_callback=logging_callback) as session:
                 if log_handler:
-                    await session.set_logging_level(logging_level or 'info')
+                    await session.set_logging_level('debug')
                 yield CodeSandbox(session)

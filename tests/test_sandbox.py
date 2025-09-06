@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -8,32 +9,82 @@ from mcp_run_python import code_sandbox
 pytestmark = pytest.mark.anyio
 
 
+@dataclass
+class Foobar:
+    a: int
+    b: str
+    c: bytes
+
+
 @pytest.mark.parametrize(
-    'deps,code,expected',
+    'deps,code,globals,expected',
     [
         pytest.param(
             [],
             'a = 1\na + 1',
+            {},
             snapshot({'status': 'success', 'output': [], 'return_value': 2}),
             id='return-value-success',
         ),
         pytest.param(
             [],
+            '"foobar"',
+            {},
+            snapshot({'status': 'success', 'output': [], 'return_value': 'foobar'}),
+            id='return-string',
+        ),
+        pytest.param(
+            [],
             'print(123)',
+            {},
             snapshot({'status': 'success', 'output': ['123'], 'return_value': None}),
             id='print-success',
         ),
         pytest.param(
             [],
+            'a',
+            {'a': [1, 2, 3]},
+            snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
+            id='access-global-variables',
+        ),
+        pytest.param(
+            [],
+            'a + b',
+            {'a': 4, 'b': 5},
+            snapshot({'status': 'success', 'output': [], 'return_value': 9}),
+            id='multiple-globals',
+        ),
+        pytest.param(
+            [],
+            'print(f)',
+            {'f': Foobar(1, '2', b'3')},
+            snapshot({'status': 'success', 'output': ["{'a': 1, 'b': '2', 'c': '3'}"], 'return_value': None}),
+            id='print-complex-global',
+        ),
+        pytest.param(
+            [],
+            'f',
+            {'f': Foobar(1, '2', b'3')},
+            snapshot({'status': 'success', 'output': [], 'return_value': {'a': 1, 'b': '2', 'c': '3'}}),
+            id='return-complex-global',
+        ),
+        pytest.param(
+            [],
+            'f',
+            {'f': Foobar(1, '2', b'3')},
+            snapshot({'status': 'success', 'output': [], 'return_value': {'a': 1, 'b': '2', 'c': '3'}}),
+            id='return-complex-global',
+        ),
+        pytest.param(
+            [],
             'print(unknown)',
+            {},
             snapshot(
                 {
                     'status': 'run-error',
                     'output': [],
                     'error': """\
 Traceback (most recent call last):
-    ...<9 lines>...
-    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     print(unknown)
           ^^^^^^^
@@ -44,16 +95,62 @@ NameError: name 'unknown' is not defined
             id='print-error',
         ),
         pytest.param(
+            [],
+            """\
+def foo():
+    1 / 0
+
+def bar():
+    foo()
+
+def baz():
+    bar()
+
+baz()""",
+            {},
+            snapshot(
+                {
+                    'status': 'run-error',
+                    'output': [],
+                    'error': """\
+Traceback (most recent call last):
+  File "main.py", line 10, in <module>
+    baz()
+    ~~~^^
+  File "main.py", line 8, in baz
+    bar()
+    ~~~^^
+  File "main.py", line 5, in bar
+    foo()
+    ~~~^^
+  File "main.py", line 2, in foo
+    1 / 0
+    ~~^~~
+ZeroDivisionError: division by zero
+""",
+                }
+            ),
+            id='traceback',
+        ),
+        pytest.param(
             ['numpy'],
             'import numpy\nnumpy.array([1, 2, 3])',
+            {},
             snapshot({'status': 'success', 'output': [], 'return_value': [1, 2, 3]}),
             id='return-numpy-success',
         ),
+        pytest.param(
+            [],
+            'import sys\nsys.version_info',
+            {},
+            snapshot({'status': 'success', 'output': [], 'return_value': [3, 13, 2, 'final', 0]}),
+            id='python-version',
+        ),
     ],
 )
-async def test_sandbox(deps: list[str], code: str, expected: Any):
+async def test_sandbox(deps: list[str], code: str, globals: dict[str, Any], expected: Any):
     async with code_sandbox(dependencies=deps) as sandbox:
-        result = await sandbox.eval(code)
+        result = await sandbox.eval(code, globals)
         assert result == expected
 
 
@@ -80,8 +177,6 @@ async def test_multiple_sandboxes():
                         'output': [],
                         'error': """\
 Traceback (most recent call last):
-    ...<9 lines>...
-    .run_async(globals, locals)
   File "main.py", line 1, in <module>
     import numpy
 ModuleNotFoundError: No module named 'numpy'
@@ -109,7 +204,7 @@ async def test_print_handler():
     assert next(((level, msg) for level, msg in logs if level == 'debug'), None) == snapshot(
         (
             'debug',
-            'loadPackage: Loading annotated-types, micropip, pydantic, pydantic_core, typing-extensions',
+            'Loading annotated-types, micropip, pydantic, pydantic_core, typing-extensions',
         ),
     )
     assert [(level, msg) for level, msg in logs if level == 'info'][-1] == snapshot(('info', 'hello 123'))
