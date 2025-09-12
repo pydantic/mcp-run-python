@@ -30,7 +30,11 @@ export async function main() {
       return
     } else if (args[0] === 'streamable_http') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'])
+      runStreamableHttp(port, deps, flags['return-mode'], false)
+      return
+    } else if (args[0] === 'streamable_http_stateless') {
+      const port = parseInt(flags.port)
+      runStreamableHttp(port, deps, flags['return-mode'], true)
       return
     } else if (args[0] === 'example') {
       await example(deps)
@@ -44,7 +48,7 @@ export async function main() {
     `\
 Invalid arguments: ${args.join(' ')}
 
-Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|noop]
+Usage: deno ... deno/main.ts [stdio|streamable_http|streamable_http_stateless|install_deps|noop]
 
 options:
 --port <port>             Port to run the HTTP server on (default: 3001)
@@ -164,24 +168,78 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
   res.end()
 }
 
+function createPathMatcher(req: http.IncomingMessage, url: URL) {
+  return (method: string, path: string): boolean => {
+    if (url.pathname === path) {
+      return req.method === method
+    }
+    return false
+  }
+}
+
+function pathMatch(req: http.IncomingMessage, url: URL) {
+  return url.pathname === req.url
+}
+
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[], returnMode: string) {
+function runStreamableHttp(port: number, deps: string[], returnMode: string, stateless: boolean): void {
+  const server = (stateless ? createStatelessHttpServer : createStatefulHttpServer)(deps, returnMode)
+  server.listen(port, () => {
+    console.log(`Listening on port ${port}`)
+  })
+}
+
+function createStatelessHttpServer(deps: string[], returnMode: string): http.Server {
+  return http.createServer(async (req, res) => {
+    const url = httpGetUrl(req)
+    const match = createPathMatcher(req, url)
+
+    if (match('POST', '/mcp')) {
+      try {
+        const body = await httpGetBody(req)
+        const mcpServer = createServer(deps, returnMode)
+        const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+        })
+
+        res.on('close', () => {
+          transport.close()
+          mcpServer.close()
+        })
+
+        await mcpServer.connect(transport)
+        await transport.handleRequest(req, res, body)
+      } catch (error) {
+        console.error('Error handling MCP request:', error)
+        if (!res.headersSent) {
+          httpSetJsonResponse(res, 500, 'Internal server error', -32603)
+        }
+      }
+    } else if (match('GET', '/mcp')) {
+      // SSE notifications not supported in stateless mode
+      httpSetJsonResponse(res, 405, 'Method not allowed.', -32000)
+    } else if (match('DELETE', '/mcp')) {
+      // Session termination not needed in stateless mode
+      httpSetJsonResponse(res, 405, 'Method not allowed.', -32000)
+    } else if (pathMatch(req, url)) {
+      httpSetTextResponse(res, 405, 'Method not allowed')
+    } else {
+      httpSetTextResponse(res, 404, 'Page not found')
+    }
+  })
+}
+
+function createStatefulHttpServer(deps: string[], returnMode: string): http.Server {
+  // Stateful mode with session management
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
   const mcpServer = createServer(deps, returnMode)
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
-  const server = http.createServer(async (req, res) => {
+  return http.createServer(async (req, res) => {
     const url = httpGetUrl(req)
-    let pathMatch = false
-    function match(method: string, path: string): boolean {
-      if (url.pathname === path) {
-        pathMatch = true
-        return req.method === method
-      }
-      return false
-    }
+    const match = createPathMatcher(req, url)
 
     // Reusable handler for GET and DELETE requests
     async function handleSessionRequest() {
@@ -237,15 +295,11 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
     } else if (match('DELETE', '/mcp')) {
       // Handle requests for session termination
       await handleSessionRequest()
-    } else if (pathMatch) {
+    } else if (pathMatch(req, url)) {
       httpSetTextResponse(res, 405, 'Method not allowed')
     } else {
       httpSetTextResponse(res, 404, 'Page not found')
     }
-  })
-
-  server.listen(port, () => {
-    console.log(`Listening on port ${port}`)
   })
 }
 
