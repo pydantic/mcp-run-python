@@ -168,19 +168,6 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
   res.end()
 }
 
-function createPathMatcher(req: http.IncomingMessage, url: URL) {
-  return (method: string, path: string): boolean => {
-    if (url.pathname === path) {
-      return req.method === method
-    }
-    return false
-  }
-}
-
-function pathMatch(req: http.IncomingMessage, url: URL) {
-  return url.pathname === req.url
-}
-
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
@@ -194,39 +181,32 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string, sta
 function createStatelessHttpServer(deps: string[], returnMode: string): http.Server {
   return http.createServer(async (req, res) => {
     const url = httpGetUrl(req)
-    const match = createPathMatcher(req, url)
 
-    if (match('POST', '/mcp')) {
-      try {
-        const body = await httpGetBody(req)
-        const mcpServer = createServer(deps, returnMode)
-        const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: undefined,
-        })
-
-        res.on('close', () => {
-          transport.close()
-          mcpServer.close()
-        })
-
-        await mcpServer.connect(transport)
-        await transport.handleRequest(req, res, body)
-      } catch (error) {
-        console.error('Error handling MCP request:', error)
-        if (!res.headersSent) {
-          httpSetJsonResponse(res, 500, 'Internal server error', -32603)
-        }
-      }
-    } else if (match('GET', '/mcp')) {
-      // SSE notifications not supported in stateless mode
-      httpSetJsonResponse(res, 405, 'Method not allowed.', -32000)
-    } else if (match('DELETE', '/mcp')) {
-      // Session termination not needed in stateless mode
-      httpSetJsonResponse(res, 405, 'Method not allowed.', -32000)
-    } else if (pathMatch(req, url)) {
-      httpSetTextResponse(res, 405, 'Method not allowed')
-    } else {
+    if (url.pathname !== '/mcp') {
       httpSetTextResponse(res, 404, 'Page not found')
+      return
+    }
+
+    try {
+      const mcpServer = createServer(deps, returnMode)
+      const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      })
+
+      res.on('close', () => {
+        transport.close()
+        mcpServer.close()
+      })
+
+      await mcpServer.connect(transport)
+
+      const body = req.method === 'POST' ? await httpGetBody(req) : undefined
+      await transport.handleRequest(req, res, body)
+    } catch (error) {
+      console.error('Error handling MCP request:', error)
+      if (!res.headersSent) {
+        httpSetJsonResponse(res, 500, 'Internal server error', -32603)
+      }
     }
   })
 }
@@ -239,7 +219,14 @@ function createStatefulHttpServer(deps: string[], returnMode: string): http.Serv
 
   return http.createServer(async (req, res) => {
     const url = httpGetUrl(req)
-    const match = createPathMatcher(req, url)
+    let pathMatch = false
+    function match(method: string, path: string): boolean {
+      if (url.pathname === path) {
+        pathMatch = true
+        return req.method === method
+      }
+      return false
+    }
 
     // Reusable handler for GET and DELETE requests
     async function handleSessionRequest() {
@@ -295,7 +282,7 @@ function createStatefulHttpServer(deps: string[], returnMode: string): http.Serv
     } else if (match('DELETE', '/mcp')) {
       // Handle requests for session termination
       await handleSessionRequest()
-    } else if (pathMatch(req, url)) {
+    } else if (pathMatch) {
       httpSetTextResponse(res, 405, 'Method not allowed')
     } else {
       httpSetTextResponse(res, 404, 'Page not found')
