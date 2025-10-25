@@ -72,8 +72,8 @@ export class RunCode {
         })
 
         // check files that got saved
-        pyodide.FS.unmount('/output_files')
         const files = await this.readAndDeleteFiles(folderPath)
+        pyodide.FS.unmount('/output_files')
 
         return {
           status: 'success',
@@ -82,6 +82,7 @@ export class RunCode {
           embeddedResources: files,
         }
       } catch (err) {
+        pyodide.FS.unmount('/output_files')
         console.log(err)
         return {
           status: 'run-error',

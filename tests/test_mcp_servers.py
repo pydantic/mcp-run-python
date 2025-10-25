@@ -200,7 +200,7 @@ async def test_run_python_code(
             [],
             [
                 'from pathlib import Path',
-                'Path("./hello.txt").write_text("hello world!")',
+                'Path("/output_files/hello.txt").write_text("hello world!")',
             ],
             snapshot("""\
 <status>success</status>
@@ -238,7 +238,7 @@ async def test_run_python_code_with_output_resource(
         resource_content = result.content[1:]
         assert isinstance(text_content, types.TextContent)
         assert text_content.text == expected_output
-        assert len(resource_content) == len(expected_output)
+        assert len(resource_content) == len(expected_resources)
         for got, expected in zip(resource_content, expected_resources):
             assert got == expected
 

@@ -113,7 +113,6 @@ To output files or images, save them in the "/output_files" folder.
         returnMode !== 'xml',
       )
       await Promise.all(logPromises)
-      console.error(result)
       const mcpResponse: any[] = []
       mcpResponse.push({ type: 'text', text: returnMode === 'xml' ? asXml(result) : asJson(result) })
 
