@@ -1,6 +1,9 @@
 // deno-lint-ignore-file no-explicit-any
 import { loadPyodide, type PyodideInterface } from 'pyodide'
 import { preparePythonCode } from './prepareEnvCode.ts'
+import { randomBytes } from 'node:crypto'
+import mime from 'mime-types'
+import { encodeBase64 } from '@std/encoding/base64'
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
 
 export interface CodeFile {
@@ -56,16 +59,30 @@ export class RunCode {
       }
     } else if (file) {
       try {
+        // make the temp file system for pyodide to use
+        const folderName = randomBytes(20).toString('hex').slice(0, 20)
+        const folderPath = `./output_files/${folderName}`
+        await Deno.mkdir(folderPath, { recursive: true })
+        pyodide.mountNodeFS('/output_files', folderPath)
+
+        // run the code with pyodide
         const rawValue = await pyodide.runPythonAsync(file.content, {
           globals: pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
           filename: file.name,
         })
+
+        // check files that got saved
+        pyodide.FS.unmount('/output_files')
+        const files = await this.readAndDeleteFiles(folderPath)
+
         return {
           status: 'success',
           output: this.takeOutput(sys),
           returnValueJson: preparePyEnv.dump_json(rawValue, alwaysReturnJson),
+          embeddedResources: files,
         }
       } catch (err) {
+        console.log(err)
         return {
           status: 'run-error',
           output: this.takeOutput(sys),
@@ -77,8 +94,36 @@ export class RunCode {
         status: 'success',
         output: this.takeOutput(sys),
         returnValueJson: null,
+        embeddedResources: [],
       }
     }
+  }
+
+  async readAndDeleteFiles(folderPath: string): Promise<Resource[]> {
+    const results: Resource[] = []
+    for await (const file of Deno.readDir(folderPath)) {
+      // Skip directories
+      if (!file.isFile) continue
+
+      const fileName = file.name
+      const filePath = `${folderPath}/${fileName}`
+      const mimeType = mime.lookup(fileName)
+      const fileData = await Deno.readFile(filePath)
+
+      // Convert binary to Base64
+      const base64Encoded = encodeBase64(fileData)
+
+      results.push({
+        name: fileName,
+        mimeType: mimeType,
+        blob: base64Encoded,
+      })
+    }
+
+    // Now delete the file folder - otherwise they add up :)
+    await Deno.remove(folderPath, { recursive: true })
+
+    return results
   }
 
   async prepEnv(
@@ -140,11 +185,18 @@ export class RunCode {
   }
 }
 
+interface Resource {
+  name: string
+  mimeType: string
+  blob: string
+}
+
 interface RunSuccess {
   status: 'success'
   // we could record stdout and stderr separately, but I suspect simplicity is more important
   output: string[]
   returnValueJson: string | null
+  embeddedResources: Resource[]
 }
 
 interface RunError {

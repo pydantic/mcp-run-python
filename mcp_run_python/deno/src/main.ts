@@ -75,8 +75,9 @@ function createServer(deps: string[], returnMode: string): McpServer {
   const toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
 
 The code may be async, and the value on the last line will be returned as the return value.
-
 The code will be executed with Python 3.13.
+
+To output files or images, save them in the "/output_files" folder.
 `
 
   let setLogLevel: LoggingLevel = 'emergency'
@@ -112,9 +113,26 @@ The code will be executed with Python 3.13.
         returnMode !== 'xml',
       )
       await Promise.all(logPromises)
-      return {
-        content: [{ type: 'text', text: returnMode === 'xml' ? asXml(result) : asJson(result) }],
+      console.error(result)
+      const mcpResponse: any[] = []
+      mcpResponse.push({ type: 'text', text: returnMode === 'xml' ? asXml(result) : asJson(result) })
+
+      // Add the Resources - if there are any
+      if (result.status === 'success') {
+        for (const entry of result.embeddedResources) {
+          mcpResponse.push({
+            type: 'resource',
+            resource: {
+              uri: 'file://_', // not providing a file url, as enabling resources is optional according to MCP spec: https://modelcontextprotocol.io/specification/2025-06-18/server/tools#embedded-resources
+              name: entry.name,
+              mimeType: entry.mimeType,
+              blob: entry.blob,
+            },
+          })
+        }
       }
+
+      return { content: mcpResponse }
     },
   )
   return server
@@ -175,6 +193,7 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
   const server = http.createServer(async (req, res) => {
     const url = httpGetUrl(req)
     let pathMatch = false
+
     function match(method: string, path: string): boolean {
       if (url.pathname === path) {
         pathMatch = true

@@ -13,6 +13,7 @@ from inline_snapshot import snapshot
 from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.types import BlobResourceContents, EmbeddedResource
 
 from mcp_run_python import async_prepare_deno_env
 
@@ -38,7 +39,7 @@ def fixture_run_mcp_session(
             assert request.param == 'streamable_http', request.param
             port = 3101
             async with async_prepare_deno_env('streamable_http', http_port=port, dependencies=deps) as env:
-                p = subprocess.Popen(['deno', *env.args], cwd=env.cwd)
+                p = subprocess.Popen(['deno', *env.args], cwd=env.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 try:
                     url = f'http://localhost:{port}/mcp'
                     await wait_for_server(url, 8)
@@ -190,6 +191,57 @@ async def test_run_python_code(
         content = result.content[0]
         assert isinstance(content, types.TextContent)
         assert content.text == expected_output
+
+
+@pytest.mark.parametrize(
+    'deps,code,expected_output,expected_resources',
+    [
+        pytest.param(
+            [],
+            [
+                'from pathlib import Path',
+                'Path("./hello.txt").write_text("hello world!")',
+            ],
+            snapshot("""\
+<status>success</status>
+<return_value>
+12
+</return_value>\
+"""),
+            [
+                EmbeddedResource(
+                    type="resource",
+                    resource=BlobResourceContents(
+                        uri="file://_",
+                        mimeType="text/plain",
+                        name="hello.txt",
+                        blob="aGVsbG8gd29ybGQh",
+                    ),
+                )
+            ],
+            id='hello-world-file',
+        ),
+    ],
+)
+async def test_run_python_code_with_output_resource(
+    run_mcp_session: Callable[[list[str]], AbstractAsyncContextManager[ClientSession]],
+    deps: list[str],
+    code: list[str],
+    expected_output: str,
+    expected_resources: list[EmbeddedResource],
+) -> None:
+    async with run_mcp_session(deps) as mcp_session:
+        await mcp_session.initialize()
+        result = await mcp_session.call_tool('run_python_code', {'python_code': '\n'.join(code)})
+        assert len(result.content) >= 2
+        text_content = result.content[0]
+        resource_content = result.content[1:]
+        assert isinstance(text_content, types.TextContent)
+        assert text_content.text == expected_output
+        assert len(resource_content) == len(expected_output)
+        for got, expected in zip(resource_content, expected_resources):
+            assert got == expected
+
 
 
 async def test_install_run_python_code() -> None:
