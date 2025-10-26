@@ -42,7 +42,7 @@ def run_mcp_server(
     """
     subprocess_kwargs = {}
     if verbose:
-        subprocess_kwargs = {"stdout":sys.stdout, "stderr":sys.stderr}
+        subprocess_kwargs = {'stdout': sys.stdout, 'stderr': sys.stderr}
 
     with prepare_deno_env(
         mode,

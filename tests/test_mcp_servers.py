@@ -210,12 +210,12 @@ async def test_run_python_code(
 """),
             [
                 EmbeddedResource(
-                    type="resource",
+                    type='resource',
                     resource=BlobResourceContents(
-                        uri="file://_",
-                        mimeType="text/plain",
-                        name="hello.txt",
-                        blob="aGVsbG8gd29ybGQh",
+                        uri='file://_',
+                        mimeType='text/plain',
+                        name='hello.txt',
+                        blob='aGVsbG8gd29ybGQh',
                     ),
                 )
             ],
@@ -241,7 +241,6 @@ async def test_run_python_code_with_output_resource(
         assert len(resource_content) == len(expected_resources)
         for got, expected in zip(resource_content, expected_resources):
             assert got == expected
-
 
 
 async def test_install_run_python_code() -> None:
