@@ -214,7 +214,7 @@ async def test_run_python_code(
                     resource=BlobResourceContents(
                         uri='file://_',
                         mimeType='text/plain',
-                        name='hello.txt',
+                        name='hello.txt',  # pyright: ignore[reportCallIssue]
                         blob='aGVsbG8gd29ybGQh',
                     ),
                 )
