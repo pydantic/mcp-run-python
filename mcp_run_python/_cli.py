@@ -53,7 +53,6 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             http_port=args.port,
             dependencies=deps,
             deps_log_handler=deps_log_handler,
-            verbose=bool(args.verbose),
         )
         return return_code
     else:
