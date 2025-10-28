@@ -24,6 +24,7 @@ the rest of the operating system.
 - **Complete Results**: Captures standard output, standard error, and return values
 - **Asynchronous Support**: Runs async code properly
 - **Error Handling**: Provides detailed error reports for debugging
+- **File Output**: Can output and return files & images. Useful for things like generating graphs
 
 _(This code was previously part of [Pydantic AI](https://github.com/pydantic/pydantic-ai) but was moved to a separate repo to make it easier to maintain.)_
 

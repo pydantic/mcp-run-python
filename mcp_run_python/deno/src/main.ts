@@ -74,10 +74,11 @@ function createServer(deps: string[], returnMode: string): McpServer {
 
   const toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
 
-The code may be async, and the value on the last line will be returned as the return value.
-The code will be executed with Python 3.13.
-
-To output files or images, save them in the "/output_files" folder.
+### Guidelines
+- The code may be async, and the value on the last line will be returned as the return value.
+- The code will be executed with Python 3.13 using pyodide - so adapt your code if needed.
+- To output files or images, save them in the "/output_files" folder.
+- You have these python packages installed: \`${deps}\`
 `
 
   let setLogLevel: LoggingLevel = 'emergency'
