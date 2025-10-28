@@ -98,6 +98,7 @@ def prepare_deno_env(
         src = Path(__file__).parent / 'deno'
         logger.debug('Copying from %s to %s...', src, cwd)
         shutil.copytree(src, cwd)
+        (cwd / 'output_files').mkdir()
         logger.info('Installing dependencies %s...', dependencies)
 
         args = 'deno', *_deno_install_args(dependencies)
@@ -181,7 +182,8 @@ def _deno_run_args(
     if allow_networking:
         args += ['--allow-net']
     args += [
-        '--allow-read=./node_modules',
+        '--allow-read=./node_modules,./output_files',
+        '--allow-write=./output_files',
         '--node-modules-dir=auto',
         'src/main.ts',
         mode,
