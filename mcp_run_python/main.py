@@ -2,6 +2,7 @@ import asyncio
 import logging
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
@@ -26,6 +27,7 @@ def run_mcp_server(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    verbose: bool = False,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -36,7 +38,12 @@ def run_mcp_server(
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
+        verbose: Log deno outputs to CLI
     """
+    subprocess_kwargs = {}
+    if verbose:
+        subprocess_kwargs = {'stdout': sys.stdout, 'stderr': sys.stderr}
+
     with prepare_deno_env(
         mode,
         dependencies=dependencies,
@@ -51,7 +58,7 @@ def run_mcp_server(
             logger.info('Running mcp-run-python via %s...', mode)
 
         try:
-            p = subprocess.run(('deno', *env.args), cwd=env.cwd)
+            p = subprocess.run(('deno', *env.args), cwd=env.cwd, **subprocess_kwargs)
         except KeyboardInterrupt:  # pragma: no cover
             logger.warning('Server stopped.')
             return 0
@@ -98,6 +105,7 @@ def prepare_deno_env(
         src = Path(__file__).parent / 'deno'
         logger.debug('Copying from %s to %s...', src, cwd)
         shutil.copytree(src, cwd)
+        (cwd / 'output_files').mkdir()
         logger.info('Installing dependencies %s...', dependencies)
 
         args = 'deno', *_deno_install_args(dependencies)
@@ -181,7 +189,8 @@ def _deno_run_args(
     if allow_networking:
         args += ['--allow-net']
     args += [
-        '--allow-read=./node_modules',
+        '--allow-read=./node_modules,./output_files',
+        '--allow-write=./output_files',
         '--node-modules-dir=auto',
         'src/main.ts',
         mode,
