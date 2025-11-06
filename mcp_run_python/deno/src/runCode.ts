@@ -30,6 +30,7 @@ export class RunCode {
     file?: CodeFile,
     globals?: Record<string, any>,
     alwaysReturnJson: boolean = false,
+    enableFileOutputs: boolean = false,
   ): Promise<RunSuccess | RunError> {
     let pyodide: PyodideInterface
     let sys: any
@@ -59,11 +60,17 @@ export class RunCode {
       }
     } else if (file) {
       try {
-        // make the temp file system for pyodide to use
-        const folderName = randomBytes(20).toString('hex').slice(0, 20)
-        const folderPath = `./output_files/${folderName}`
-        await Deno.mkdir(folderPath, { recursive: true })
-        pyodide.mountNodeFS('/output_files', folderPath)
+        // defaults in case file output is not enabled
+        let folderPath = ""
+        let files = []
+
+        if (enableFileOutputs) {
+          // make the temp file system for pyodide to use
+          const folderName = randomBytes(20).toString('hex').slice(0, 20)
+          folderPath = `./output_files/${folderName}`
+          await Deno.mkdir(folderPath, { recursive: true })
+          pyodide.mountNodeFS('/output_files', folderPath)
+        }
 
         // run the code with pyodide
         const rawValue = await pyodide.runPythonAsync(file.content, {
@@ -71,9 +78,11 @@ export class RunCode {
           filename: file.name,
         })
 
-        // check files that got saved
-        const files = await this.readAndDeleteFiles(folderPath)
-        pyodide.FS.unmount('/output_files')
+        if (enableFileOutputs) {
+          // check files that got saved
+          files = await this.readAndDeleteFiles(folderPath)
+          pyodide.FS.unmount('/output_files')
+        }
 
         return {
           status: 'success',

@@ -20,17 +20,19 @@ const VERSION = '0.0.13'
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
-    string: ['deps', 'return-mode', 'port'],
-    default: { port: '3001', 'return-mode': 'xml' },
+    string: ['deps', 'return-mode', 'port', "enable-file-outputs"],
+    default: { port: '3001', 'return-mode': 'xml', "enable-file-outputs": false },
   })
+  // todo
+  console.error(flags)
   const deps = flags.deps?.split(',') ?? []
   if (args.length >= 1) {
     if (args[0] === 'stdio') {
-      await runStdio(deps, flags['return-mode'])
+      await runStdio(deps, flags['return-mode'], flags['enable-file-outputs'])
       return
     } else if (args[0] === 'streamable_http') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'])
+      runStreamableHttp(port, deps, flags['return-mode'], flags['enable-file-outputs'])
       return
     } else if (args[0] === 'example') {
       await example(deps)
@@ -57,7 +59,7 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(deps: string[], returnMode: string): McpServer {
+function createServer(deps: string[], returnMode: string, enableFileOutputs: boolean): McpServer {
   const runCode = new RunCode()
   const server = new McpServer(
     {
@@ -72,14 +74,16 @@ function createServer(deps: string[], returnMode: string): McpServer {
     },
   )
 
-  const toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
+  let toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
 
 ### Guidelines
 - The code may be async, and the value on the last line will be returned as the return value.
 - The code will be executed with Python 3.13 using pyodide - so adapt your code if needed.
-- To output files or images, save them in the "/output_files" folder.
 - You have these python packages installed: \`${deps}\`
 `
+  if (enableFileOutputs) {
+    toolDescription += '- To output files or images, save them in the "/output_files" folder.\n'
+  }
 
   let setLogLevel: LoggingLevel = 'emergency'
 
@@ -112,6 +116,7 @@ function createServer(deps: string[], returnMode: string): McpServer {
         { name: 'main.py', content: python_code },
         global_variables,
         returnMode !== 'xml',
+        enableFileOutputs,
       )
       await Promise.all(logPromises)
       const mcpResponse: any[] = []
@@ -185,9 +190,9 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[], returnMode: string) {
+function runStreamableHttp(port: number, deps: string[], returnMode: string, enableFileOutputs: boolean) {
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
-  const mcpServer = createServer(deps, returnMode)
+  const mcpServer = createServer(deps, returnMode, enableFileOutputs)
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
   const server = http.createServer(async (req, res) => {
@@ -271,8 +276,8 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio(deps: string[], returnMode: string) {
-  const mcpServer = createServer(deps, returnMode)
+async function runStdio(deps: string[], returnMode: string, enableFileOutputs: boolean) {
+  const mcpServer = createServer(deps, returnMode, enableFileOutputs)
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }

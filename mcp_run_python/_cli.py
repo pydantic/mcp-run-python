@@ -27,6 +27,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         '--disable-networking', action='store_true', help='Disable networking during execution of python code'
     )
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--enable-file-outputs', action='store_true', help='Enable file output functionality')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
     parser.add_argument(
         'mode',
@@ -53,6 +54,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             http_port=args.port,
             dependencies=deps,
             deps_log_handler=deps_log_handler,
+            enable_file_outputs=args.enable_file_outputs,
         )
         return return_code
     else:

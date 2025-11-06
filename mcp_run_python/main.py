@@ -26,6 +26,7 @@ def run_mcp_server(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -36,6 +37,7 @@ def run_mcp_server(
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
+        enable_file_outputs: Whether to enable output files
     """
     with prepare_deno_env(
         mode,
@@ -44,7 +46,9 @@ def run_mcp_server(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        enable_file_outputs=enable_file_outputs,
     ) as env:
+        logger.info(f'Running with file output support {"enabled" if enable_file_outputs else "disabled"}.')
         if mode == 'streamable_http':
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
         else:
@@ -74,6 +78,7 @@ def prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
 ) -> Iterator[DenoEnv]:
     """Prepare the deno environment for running the mcp-run-python server with Deno.
 
@@ -89,6 +94,7 @@ def prepare_deno_env(
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether the prepared DenoEnv should allow networking when running code.
             Note that we always allow networking during environment initialization to install dependencies.
+        enable_file_outputs: Whether to enable output files
 
     Returns:
         Yields the deno environment details.
@@ -122,6 +128,7 @@ def prepare_deno_env(
             dependencies=dependencies,
             return_mode=return_mode,
             allow_networking=allow_networking,
+            enable_file_outputs=enable_file_outputs,
         )
         yield DenoEnv(cwd, args)
 
@@ -177,6 +184,7 @@ def _deno_run_args(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
 ) -> list[str]:
     args = ['run']
     if allow_networking:
@@ -189,6 +197,8 @@ def _deno_run_args(
         mode,
         f'--return-mode={return_mode}',
     ]
+    if enable_file_outputs:
+        args += ['--enable-file-outputs']
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
     if http_port is not None:
