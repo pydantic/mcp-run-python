@@ -344,3 +344,69 @@ async def test_run_parallel_python_code(
 11
 </return_value>""".strip()
             )
+
+
+async def test_run_parallel_python_code_with_files(
+    run_mcp_session: Callable[[list[str], bool], AbstractAsyncContextManager[ClientSession]],
+) -> None:
+    """Check that the file system works between runs and keeps files to their runs"""
+    code_list = [
+        """
+        import time
+        from pathlib import Path
+        for i in range(5):
+            Path(f"/output_files/run1_file{i}.txt").write_text("hi")
+            time.sleep(1)
+        """,
+        """
+        import time
+        from pathlib import Path
+        for i in range(5):
+            time.sleep(1)
+            Path(f"/output_files/run2_file{i}.txt").write_text("hi")
+        """,
+    ]
+
+    async with run_mcp_session([], True) as mcp_session:
+        await mcp_session.initialize()
+
+        start = time.perf_counter()
+
+        tasks: set[asyncio.Task[types.CallToolResult]] = set()
+        async with asyncio.TaskGroup() as tg:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
+            for code in code_list:
+                task: asyncio.Task[types.CallToolResult] = tg.create_task(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                    mcp_session.call_tool('run_python_code', {'python_code': code})
+                )
+                tasks.add(task)  # pyright: ignore[reportUnknownArgumentType]
+
+        # check parallelism
+        end = time.perf_counter()
+        run_time = end - start
+        assert run_time < 10
+        assert run_time > 5
+
+        # check that all outputs are fine too
+        for task in tasks:
+            result = task.result()
+
+            assert len(result.content) == 6
+
+            run_ids: set[str] = set()
+            for content in result.content:
+                match content:
+                    case types.EmbeddedResource():
+                        # save the run id from the text file name - to make sure its all the same
+                        run_ids.add(content.resource.name.split('_')[0])  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+                        assert content.resource.blob == 'aGk='  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                    case types.TextContent():
+                        assert (
+                            content.text.strip()
+                            == """<status>success</status>
+                            <return_value>
+                            11
+                            </return_value>""".strip()
+                        )
+                    case _:
+                        raise AssertionError('Unexpected content type')
+            assert len(run_ids) == 1
