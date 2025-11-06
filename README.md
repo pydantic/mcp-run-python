@@ -107,7 +107,7 @@ logfire.instrument_pydantic_ai()
 
 
 async def main():
-    async with async_prepare_deno_env('stdio') as deno_env:
+    async with async_prepare_deno_env('stdio', enable_file_outputs=True) as deno_env:
         server = MCPServerStdio('deno', args=deno_env.args, cwd=deno_env.cwd, timeout=10)
         agent = Agent('claude-3-5-haiku-latest', toolsets=[server])
         async with agent:

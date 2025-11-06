@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import asyncio
 import re
 import subprocess
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import TYPE_CHECKING
@@ -30,7 +31,7 @@ def fixture_run_mcp_session(
     @asynccontextmanager
     async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
         if request.param == 'stdio':
-            async with async_prepare_deno_env('stdio', dependencies=deps) as env:
+            async with async_prepare_deno_env('stdio', dependencies=deps, enable_file_outputs=True) as env:
                 server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
                 async with stdio_client(server_params) as (read, write):
                     async with ClientSession(read, write) as session:
@@ -38,7 +39,9 @@ def fixture_run_mcp_session(
         else:
             assert request.param == 'streamable_http', request.param
             port = 3101
-            async with async_prepare_deno_env('streamable_http', http_port=port, dependencies=deps) as env:
+            async with async_prepare_deno_env(
+                'streamable_http', http_port=port, dependencies=deps, enable_file_outputs=True
+            ) as env:
                 p = subprocess.Popen(['deno', *env.args], cwd=env.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 try:
                     url = f'http://localhost:{port}/mcp'
@@ -277,3 +280,60 @@ async def test_install_run_python_code() -> None:
 </return_value>\
 """
                 )
+
+
+async def test_run_parallel_python_code(
+    run_mcp_session: Callable[[list[str]], AbstractAsyncContextManager[ClientSession]],
+) -> None:
+    code_list = [
+        """
+        x=11
+        x
+        """,
+        """
+        import time
+        time.sleep(5)
+        x=11
+        x
+        """,
+        """
+        import asyncio
+        await asyncio.sleep(5)
+        x=11
+        x
+        """,
+    ]
+    # Run this a couple times in parallel
+    code_list = code_list * 5
+
+    async with run_mcp_session([]) as mcp_session:
+        await mcp_session.initialize()
+
+        start = time.perf_counter()
+
+        tasks = set()
+        async with asyncio.TaskGroup() as tg:
+            for code in code_list:
+                task = tg.create_task(mcp_session.call_tool('run_python_code', {'python_code': code}))
+                tasks.add(task)
+
+        # check parallelism
+        end = time.perf_counter()
+        run_time = end - start
+        assert run_time < 10
+        assert run_time > 5
+
+        # check that all outputs are fine too
+        for task in tasks:
+            result: types.CallToolResult = task.result()
+
+            assert len(result.content) == 1
+            content = result.content[0]
+
+            assert (
+                content.text.strip()
+                == """<status>success</status>
+<return_value>
+11
+</return_value>""".strip()
+            )

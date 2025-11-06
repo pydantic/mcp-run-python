@@ -145,6 +145,7 @@ async def async_prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
 ) -> AsyncIterator[DenoEnv]:
     """Async variant of `prepare_deno_env`."""
     ct = await _asyncify(
@@ -155,6 +156,7 @@ async def async_prepare_deno_env(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        enable_file_outputs=enable_file_outputs,
     )
     try:
         yield await _asyncify(ct.__enter__)
