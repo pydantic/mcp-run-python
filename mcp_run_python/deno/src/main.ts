@@ -20,8 +20,9 @@ const VERSION = '0.0.13'
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
-    string: ['deps', 'return-mode', 'port', "enable-file-outputs"],
-    default: { port: '3001', 'return-mode': 'xml', "enable-file-outputs": false },
+    string: ['deps', 'return-mode', 'port'],
+    boolean: ['enable-file-outputs'],
+    default: { port: '3001', 'return-mode': 'xml', 'enable-file-outputs': false },
   })
   // todo
   console.error(flags)

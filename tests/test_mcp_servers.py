@@ -29,9 +29,11 @@ def fixture_run_mcp_session(
     request: pytest.FixtureRequest,
 ) -> Callable[[list[str]], AbstractAsyncContextManager[ClientSession]]:
     @asynccontextmanager
-    async def run_mcp(deps: list[str]) -> AsyncIterator[ClientSession]:
+    async def run_mcp(deps: list[str], enable_file_outputs: bool = True) -> AsyncIterator[ClientSession]:
         if request.param == 'stdio':
-            async with async_prepare_deno_env('stdio', dependencies=deps, enable_file_outputs=True) as env:
+            async with async_prepare_deno_env(
+                'stdio', dependencies=deps, enable_file_outputs=enable_file_outputs
+            ) as env:
                 server_params = StdioServerParameters(command='deno', args=env.args, cwd=env.cwd)
                 async with stdio_client(server_params) as (read, write):
                     async with ClientSession(read, write) as session:
@@ -40,7 +42,7 @@ def fixture_run_mcp_session(
             assert request.param == 'streamable_http', request.param
             port = 3101
             async with async_prepare_deno_env(
-                'streamable_http', http_port=port, dependencies=deps, enable_file_outputs=True
+                'streamable_http', http_port=port, dependencies=deps, enable_file_outputs=enable_file_outputs
             ) as env:
                 p = subprocess.Popen(['deno', *env.args], cwd=env.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 try:
@@ -282,8 +284,10 @@ async def test_install_run_python_code() -> None:
                 )
 
 
+@pytest.mark.parametrize('enable_file_outputs', [pytest.param(True), pytest.param(False)])
 async def test_run_parallel_python_code(
-    run_mcp_session: Callable[[list[str]], AbstractAsyncContextManager[ClientSession]],
+    run_mcp_session: Callable[[list[str], bool], AbstractAsyncContextManager[ClientSession]],
+    enable_file_outputs: bool,
 ) -> None:
     code_list = [
         """
@@ -306,16 +310,18 @@ async def test_run_parallel_python_code(
     # Run this a couple times in parallel
     code_list = code_list * 5
 
-    async with run_mcp_session([]) as mcp_session:
+    async with run_mcp_session([], enable_file_outputs) as mcp_session:
         await mcp_session.initialize()
 
         start = time.perf_counter()
 
-        tasks = set()
-        async with asyncio.TaskGroup() as tg:
+        tasks: set[asyncio.Task[types.CallToolResult]] = set()
+        async with asyncio.TaskGroup() as tg:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
             for code in code_list:
-                task = tg.create_task(mcp_session.call_tool('run_python_code', {'python_code': code}))
-                tasks.add(task)
+                task: asyncio.Task[types.CallToolResult] = tg.create_task(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                    mcp_session.call_tool('run_python_code', {'python_code': code})
+                )
+                tasks.add(task)  # pyright: ignore[reportUnknownArgumentType]
 
         # check parallelism
         end = time.perf_counter()
@@ -325,11 +331,12 @@ async def test_run_parallel_python_code(
 
         # check that all outputs are fine too
         for task in tasks:
-            result: types.CallToolResult = task.result()
+            result = task.result()
 
             assert len(result.content) == 1
             content = result.content[0]
 
+            assert isinstance(content, types.TextContent)
             assert (
                 content.text.strip()
                 == """<status>success</status>

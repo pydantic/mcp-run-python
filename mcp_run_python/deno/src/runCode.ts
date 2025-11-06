@@ -61,8 +61,8 @@ export class RunCode {
     } else if (file) {
       try {
         // defaults in case file output is not enabled
-        let folderPath = ""
-        let files = []
+        let folderPath = ''
+        let files: Resource[] = []
 
         if (enableFileOutputs) {
           // make the temp file system for pyodide to use
