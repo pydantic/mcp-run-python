@@ -40,9 +40,10 @@ def run_mcp_server(
         allow_networking: Whether to allow networking when running provided python code.
         verbose: Log deno outputs to CLI
     """
-    subprocess_kwargs = {}
+
+    stdout, stderr = None, None
     if verbose:
-        subprocess_kwargs = {'stdout': sys.stdout, 'stderr': sys.stderr}
+        stdout, stderr = sys.stdout, sys.stderr
 
     with prepare_deno_env(
         mode,
@@ -58,7 +59,7 @@ def run_mcp_server(
             logger.info('Running mcp-run-python via %s...', mode)
 
         try:
-            p = subprocess.run(('deno', *env.args), cwd=env.cwd, **subprocess_kwargs)
+            p = subprocess.run(('deno', *env.args), cwd=env.cwd, stdout=stdout, stderr=stderr)
         except KeyboardInterrupt:  # pragma: no cover
             logger.warning('Server stopped.')
             return 0
