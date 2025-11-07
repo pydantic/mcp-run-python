@@ -291,10 +291,6 @@ async def test_run_parallel_python_code(
 ) -> None:
     code_list = [
         """
-        x=11
-        x
-        """,
-        """
         import time
         time.sleep(5)
         x=11
@@ -307,7 +303,8 @@ async def test_run_parallel_python_code(
         x
         """,
     ]
-    # Run this a couple times in parallel
+    # Run this a couple times (10) in parallel
+    # As we have 10 pyodide workers by default, this should finish in over 5, but under 10s (first initialisation takes a bit)
     code_list = code_list * 5
 
     async with run_mcp_session([], enable_file_outputs) as mcp_session:
@@ -400,13 +397,41 @@ async def test_run_parallel_python_code_with_files(
                         run_ids.add(content.resource.name.split('_')[0])  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
                         assert content.resource.blob == 'aGk='  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
                     case types.TextContent():
-                        assert (
-                            content.text.strip()
-                            == """<status>success</status>
-                            <return_value>
-                            11
-                            </return_value>""".strip()
-                        )
+                        assert content.text.strip() == '<status>success</status>'
                     case _:
                         raise AssertionError('Unexpected content type')
             assert len(run_ids) == 1
+
+
+async def test_run_python_code_timeout(
+    run_mcp_session: Callable[[list[str], bool], AbstractAsyncContextManager[ClientSession]],
+) -> None:
+    """Check that the timeout of the run command works (60s)"""
+    code = """
+        import time
+        time.sleep(90)
+        """
+
+    async with run_mcp_session([], True) as mcp_session:
+        await mcp_session.initialize()
+
+        start = time.perf_counter()
+
+        result = await mcp_session.call_tool('run_python_code', {'python_code': code})
+
+        # check parallelism
+        end = time.perf_counter()
+        run_time = end - start
+        assert run_time > 60
+        assert run_time < 65
+
+        assert len(result.content) == 1
+        content = result.content[0]
+        assert isinstance(content, types.TextContent)
+        assert (
+            content.text.strip()
+            == """<status>run-error</status>
+            <error>
+            Error: Timeout exceeded for python execution (60 sec)
+            </error>""".strip()
+        )

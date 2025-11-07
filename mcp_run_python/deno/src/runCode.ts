@@ -19,28 +19,27 @@ interface PrepResult {
   output: string[]
 }
 
-interface PyodideWorker {
+interface PyodideWorker extends PrepResult {
   id: number
-
-  pyodide: PyodideInterface
-  sys: any
-  prepareStatus: PrepareSuccess | PrepareError | undefined
-  preparePyEnv: PreparePyEnv
-  output: string[]
-
+  pyodideInterruptBuffer: Uint8Array
   inUse: boolean
 }
 
+/*
+ * Class that instanciates pyodide and keeps multiple instances
+ * There need to be multiple instances, as file system mounting to a standard directory (which is needed for the LLM), cannot be easily done without mixing files
+ * Now, every process has their own file system & they get looped around
+ */
 class PyodideAccess {
-  // function to get a pyodide instance (with timeout & max members)
+  // context manager to get a pyodide instance (with timeout & max members)
   public async withPyodideInstance<T>(
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
     maximumInstances: number,
-    waitTimeoutMs: number,
+    pyodideWorkerWaitTimeoutSec: number,
     fn: (w: PyodideWorker) => Promise<T>,
   ): Promise<T> {
-    const w = await this.getPyodideInstance(dependencies, log, maximumInstances, waitTimeoutMs)
+    const w = await this.getPyodideInstance(dependencies, log, maximumInstances, pyodideWorkerWaitTimeoutSec)
     try {
       return await fn(w)
     } finally {
@@ -51,6 +50,76 @@ class PyodideAccess {
   private pyodideInstances: { [workerId: number]: PyodideWorker } = {}
   private nextWorkerId = 1
   private creatingCount = 0
+
+  // after code is run, this releases the worker again to the pool for other codes to run
+  private releasePyodideInstance(workerId: number): void {
+    const worker = this.pyodideInstances[workerId]
+
+    // clear interrupt buffer in case it was used
+    worker.pyodideInterruptBuffer[0] = 0
+
+    // if sb is waiting, take the first worker from queue & keep status as "inUse"
+    const waiter = this.waitQueue.shift()
+    if (waiter) {
+      clearTimeout(waiter.timer)
+      worker.inUse = true
+      waiter.resolve(worker)
+    } else {
+      worker.inUse = false
+    }
+  }
+
+  // main logic of getting a pyodide instance. Will re-use if possible, otherwise create (up to limit)
+  private async getPyodideInstance(
+    dependencies: string[],
+    log: (level: LoggingLevel, data: string) => void,
+    maximumInstances: number,
+    pyodideWorkerWaitTimeoutSec: number,
+  ): Promise<PyodideWorker> {
+    // 1) if possible, take a free - already inititalised - worker
+    const free = this.tryAcquireFree()
+    if (free) return free
+
+    // 2) if none is free, check that we are not over capacity already
+    const currentCount = Object.keys(this.pyodideInstances).length
+    if (currentCount + this.creatingCount < maximumInstances) {
+      this.creatingCount++
+      try {
+        const id = this.nextWorkerId++
+        const worker = await this.createPyodideWorker(id, dependencies, log)
+
+        // cool, created a new one so let's use that one
+        worker.inUse = true
+        this.pyodideInstances[id] = worker
+        return worker
+      } catch (err) {
+        // Need to make sure the creation gets reduced again, so simply re-throwing
+        throw err
+      } finally {
+        this.creatingCount--
+      }
+    }
+
+    // 3) we have the maximum worker, poll periodically until timeout for a free one
+    return await new Promise<PyodideWorker>((resolve, reject) => {
+      const start = Date.now()
+      const poll = () => {
+        const free = this.tryAcquireFree()
+        if (free) {
+          clearTimeout(timer)
+          resolve(free)
+          return
+        }
+        if (Date.now() - start >= pyodideWorkerWaitTimeoutSec * 1000) {
+          reject(new Error('Timeout: no free Pyodide worker'))
+          return
+        }
+        timer = setTimeout(poll, 1000)
+      }
+      let timer = setTimeout(poll, 1000)
+      this.waitQueue.push({ resolve, reject, timer })
+    })
+  }
 
   private waitQueue: {
     resolve: (w: PyodideWorker) => void
@@ -68,32 +137,23 @@ class PyodideAccess {
     return undefined
   }
 
+  // this creates the pyodide worker from scratch
   private async createPyodideWorker(
     id: number,
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
   ): Promise<PyodideWorker> {
-    // if (this.pyodide && this.preparePyEnv) {
-    //   pyodide = this.pyodide
-    //   preparePyEnv = this.preparePyEnv
-    //   sys = pyodide.pyimport('sys')
-    // } else {
-    //   if (!this.prepPromise) {
-    //     this.prepPromise = this.prepEnv(dependencies, log)
-    //   }
-    //   // TODO is this safe if the promise has already been accessed? it seems to work fine
-    //   const prep = await this.prepPromise
-    //   pyodide = prep.pyodide
-    //   preparePyEnv = prep.preparePyEnv
-    //   sys = prep.sys
-    //   prepareStatus = prep.prepareStatus
-    // }
-
     const prepPromise = this.prepEnv(dependencies, log)
     const prep = await prepPromise
+
+    // setup the interrupt buffer to be able to cancel the task
+    let interruptBuffer = new Uint8Array(new SharedArrayBuffer(1))
+    prep.pyodide.setInterruptBuffer(interruptBuffer)
+
     return {
       id,
       pyodide: prep.pyodide,
+      pyodideInterruptBuffer: interruptBuffer,
       sys: prep.sys,
       prepareStatus: prep.prepareStatus,
       preparePyEnv: prep.preparePyEnv,
@@ -102,6 +162,7 @@ class PyodideAccess {
     }
   }
 
+  // load pyodide and install dependencies
   private async prepEnv(
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
@@ -154,63 +215,6 @@ class PyodideAccess {
       output,
     }
   }
-
-  private releasePyodideInstance(workerId: number): void {
-    const worker = this.pyodideInstances[workerId]
-    if (!worker) return
-
-    // if sb is waiting, take the first worker from queue & keep status as "inUse"
-    const waiter = this.waitQueue.shift()
-    if (waiter) {
-      clearTimeout(waiter.timer)
-      worker.inUse = true
-      waiter.resolve(worker)
-    } else {
-      worker.inUse = false
-    }
-  }
-
-  private async getPyodideInstance(
-    dependencies: string[],
-    log: (level: LoggingLevel, data: string) => void,
-    maximumInstances: number,
-    waitTimeoutMs: number,
-  ): Promise<PyodideWorker> {
-    // 1) if possible, take a free - already inititalised - worker
-    const free = this.tryAcquireFree()
-    if (free) return free
-
-    // 2) if none is free, check that we are not over capacity already
-    const currentCount = Object.keys(this.pyodideInstances).length
-    if (currentCount + this.creatingCount < maximumInstances) {
-      this.creatingCount++
-      try {
-        const id = this.nextWorkerId++
-        const worker = await this.createPyodideWorker(id, dependencies, log)
-
-        // cool, created a new one so let's use that one
-        worker.inUse = true
-        this.pyodideInstances[id] = worker
-        return worker
-      } catch (err) {
-        // Need to make sure the creation gets reduced again, so simply re-throwing
-        throw err
-      } finally {
-        this.creatingCount--
-      }
-    }
-
-    // 3) we have the maximum worker, wait until timeout until some is free
-    return await new Promise<PyodideWorker>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const idx = this.waitQueue.findIndex((q) => q.resolve === resolve)
-        if (idx >= 0) this.waitQueue.splice(idx, 1)
-        reject(new Error('Timeout: no free Pyodide worker'))
-      }, waitTimeoutMs)
-
-      this.waitQueue.push({ resolve, reject, timer })
-    })
-  }
 }
 
 export class RunCode {
@@ -223,78 +227,98 @@ export class RunCode {
     globals?: Record<string, any>,
     alwaysReturnJson: boolean = false,
     enableFileOutputs: boolean = false,
-    pyodideMaximumInstances: number = 5,
-    pyodideWaitTimeoutMs: number = 60_000,
+    pyodideMaxWorkers: number = 10,
+    pyodideCodeRunTimeoutSec: number = 60,
+    pyodideWorkerWaitTimeoutSec: number = 60,
   ): Promise<RunSuccess | RunError> {
     // get a pyodide instance for this job
-    return await this.pyodideAccess.withPyodideInstance(
-      dependencies,
-      log,
-      pyodideMaximumInstances,
-      pyodideWaitTimeoutMs,
-      async (pyodideWorker) => {
-        if (pyodideWorker.prepareStatus && pyodideWorker.prepareStatus.kind == 'error') {
-          return {
-            status: 'install-error',
-            output: this.takeOutput(pyodideWorker),
-            error: pyodideWorker.prepareStatus.message,
-          }
-        } else if (file) {
-          try {
-            // defaults in case file output is not enabled
-            let folderPath = ''
-            let files: Resource[] = []
-
-            if (enableFileOutputs) {
-              // make the temp file system for pyodide to use
-              const folderName = randomBytes(20).toString('hex').slice(0, 20)
-              folderPath = `./output_files/${folderName}`
-              await Deno.mkdir(folderPath, { recursive: true })
-              pyodideWorker.pyodide.mountNodeFS('/output_files', folderPath)
+    try {
+      return await this.pyodideAccess.withPyodideInstance(
+        dependencies,
+        log,
+        pyodideMaxWorkers,
+        pyodideWorkerWaitTimeoutSec,
+        async (pyodideWorker) => {
+          if (pyodideWorker.prepareStatus && pyodideWorker.prepareStatus.kind == 'error') {
+            return {
+              status: 'install-error',
+              output: this.takeOutput(pyodideWorker),
+              error: pyodideWorker.prepareStatus.message,
             }
+          } else if (file) {
+            try {
+              // defaults in case file output is not enabled
+              let folderPath = ''
+              let files: Resource[] = []
 
-            // run the code with pyodide
-            const rawValue = await pyodideWorker.pyodide.runPythonAsync(file.content, {
-              globals: pyodideWorker.pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
-              filename: file.name,
-            })
+              if (enableFileOutputs) {
+                // make the temp file system for pyodide to use
+                const folderName = randomBytes(20).toString('hex').slice(0, 20)
+                folderPath = `./output_files/${folderName}`
+                await Deno.mkdir(folderPath, { recursive: true })
+                pyodideWorker.pyodide.mountNodeFS('/output_files', folderPath)
+              }
 
-            if (enableFileOutputs) {
-              // check files that got saved
-              files = await this.readAndDeleteFiles(folderPath)
-              pyodideWorker.pyodide.FS.unmount('/output_files')
+              // run the code with pyodide including a timeout
+              let timeoutId: any
+              const rawValue = await Promise.race([
+                pyodideWorker.pyodide.runPythonAsync(file.content, {
+                  globals: pyodideWorker.pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
+                  filename: file.name,
+                }),
+                new Promise((_, reject) => {
+                  timeoutId = setTimeout(() => {
+                    // after the time passes signal SIGINT to stop execution
+                    // 2 stands for SIGINT
+                    pyodideWorker.pyodideInterruptBuffer[0] = 2
+                    reject(new Error(`Timeout exceeded for python execution (${pyodideCodeRunTimeoutSec} sec)`))
+                  }, pyodideCodeRunTimeoutSec * 1000)
+                }),
+              ])
+              clearTimeout(timeoutId)
+
+              if (enableFileOutputs) {
+                // check files that got saved
+                files = await this.readAndDeleteFiles(folderPath)
+                pyodideWorker.pyodide.FS.unmount('/output_files')
+              }
+
+              return {
+                status: 'success',
+                output: this.takeOutput(pyodideWorker),
+                returnValueJson: pyodideWorker.preparePyEnv.dump_json(rawValue, alwaysReturnJson),
+                embeddedResources: files,
+              }
+            } catch (err) {
+              try {
+                pyodideWorker.pyodide.FS.unmount('/output_files')
+              } catch (_) {}
+
+              console.log(err)
+              return {
+                status: 'run-error',
+                output: this.takeOutput(pyodideWorker),
+                error: formatError(err),
+              }
             }
-
-            // label the worker as free again
-            pyodideWorker.inUse = false
-
+          } else {
             return {
               status: 'success',
               output: this.takeOutput(pyodideWorker),
-              returnValueJson: pyodideWorker.preparePyEnv.dump_json(rawValue, alwaysReturnJson),
-              embeddedResources: files,
-            }
-          } catch (err) {
-            pyodideWorker.pyodide.FS.unmount('/output_files')
-            pyodideWorker.inUse = false
-            console.log(err)
-            return {
-              status: 'run-error',
-              output: this.takeOutput(pyodideWorker),
-              error: formatError(err),
+              returnValueJson: null,
+              embeddedResources: [],
             }
           }
-        } else {
-          pyodideWorker.inUse = false
-          return {
-            status: 'success',
-            output: this.takeOutput(pyodideWorker),
-            returnValueJson: null,
-            embeddedResources: [],
-          }
-        }
-      },
-    )
+        },
+      )
+    } catch (err) {
+      console.error(err)
+      return {
+        status: 'fatal-runtime-error',
+        output: [],
+        error: formatError(err),
+      }
+    }
   }
 
   async readAndDeleteFiles(folderPath: string): Promise<Resource[]> {
@@ -348,7 +372,7 @@ interface RunSuccess {
 }
 
 interface RunError {
-  status: 'install-error' | 'run-error'
+  status: 'install-error' | 'run-error' | 'fatal-runtime-error'
   output: string[]
   error: string
 }

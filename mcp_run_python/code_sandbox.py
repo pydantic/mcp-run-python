@@ -57,6 +57,7 @@ async def code_sandbox(
     log_handler: LogHandler | None = None,
     allow_networking: bool = True,
     enable_file_outputs: bool = False,
+    pyodide_max_workers: int = 10,
 ) -> AsyncIterator['CodeSandbox']:
     """Create a secure sandbox.
 
@@ -66,6 +67,7 @@ async def code_sandbox(
         deps_log_handler: A callback function to run on log statements during initial install of dependencies.
         allow_networking: Whether to allow networking or not while executing python code.
         enable_file_outputs: Whether to enable output files
+        pyodide_max_workers: How many pyodide workers to max use at the same time
     """
     async with async_prepare_deno_env(
         'stdio',
@@ -74,6 +76,7 @@ async def code_sandbox(
         return_mode='json',
         allow_networking=allow_networking,
         enable_file_outputs=enable_file_outputs,
+        pyodide_max_workers=pyodide_max_workers,
     ) as deno_env:
         server_params = StdioServerParameters(command='deno', args=deno_env.args, cwd=deno_env.cwd)
 
