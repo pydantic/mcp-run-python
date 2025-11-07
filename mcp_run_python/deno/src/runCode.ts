@@ -26,7 +26,7 @@ interface PyodideWorker extends PrepResult {
 }
 
 /*
- * Class that instanciates pyodide and keeps multiple instances
+ * Class that instantiates pyodide and keeps multiple instances
  * There need to be multiple instances, as file system mounting to a standard directory (which is needed for the LLM), cannot be easily done without mixing files
  * Now, every process has their own file system & they get looped around
  */
@@ -54,9 +54,13 @@ class PyodideAccess {
   // after code is run, this releases the worker again to the pool for other codes to run
   private releasePyodideInstance(workerId: number): void {
     const worker = this.pyodideInstances[workerId]
+    if (!worker) {
+      throw new Error(`Trying to release unknown pyodide worker ${workerId}`)
+    }
 
-    // clear interrupt buffer in case it was used
+    // clear interrupt buffer in case it was used & clear output
     worker.pyodideInterruptBuffer[0] = 0
+    worker.output.length = 0
 
     // if sb is waiting, take the first worker from queue & keep status as "inUse"
     const waiter = this.waitQueue.shift()
@@ -69,14 +73,14 @@ class PyodideAccess {
     }
   }
 
-  // main logic of getting a pyodide instance. Will re-use if possible, otherwise create (up to limit)
+  // main logic of getting a pyodide instance. Will reuse if possible, otherwise create (up to limit)
   private async getPyodideInstance(
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
     maximumInstances: number,
     pyodideWorkerWaitTimeoutSec: number,
   ): Promise<PyodideWorker> {
-    // 1) if possible, take a free - already inititalised - worker
+    // 1) if possible, take a free - already initialised - worker
     const free = this.tryAcquireFree()
     if (free) return free
 
@@ -147,7 +151,7 @@ class PyodideAccess {
     const prep = await prepPromise
 
     // setup the interrupt buffer to be able to cancel the task
-    let interruptBuffer = new Uint8Array(new SharedArrayBuffer(1))
+    const interruptBuffer = new Uint8Array(new SharedArrayBuffer(1))
     prep.pyodide.setInterruptBuffer(interruptBuffer)
 
     return {
@@ -292,7 +296,9 @@ export class RunCode {
             } catch (err) {
               try {
                 pyodideWorker.pyodide.FS.unmount('/output_files')
-              } catch (_) {}
+              } catch (_) {
+                // we need to make sure unmount is attempted, but ignore errors here
+              }
 
               console.log(err)
               return {
@@ -351,9 +357,7 @@ export class RunCode {
   private takeOutput(pyodideWorker: PyodideWorker): string[] {
     pyodideWorker.sys.stdout.flush()
     pyodideWorker.sys.stderr.flush()
-    const output = pyodideWorker.output
-    pyodideWorker.output = []
-    return output
+    return [...pyodideWorker.output]
   }
 }
 

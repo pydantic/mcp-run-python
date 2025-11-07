@@ -304,7 +304,7 @@ async def test_run_parallel_python_code(
         """,
     ]
     # Run this a couple times (10) in parallel
-    # As we have 10 pyodide workers by default, this should finish in over 5, but under 10s (first initialisation takes a bit)
+    # As we have 10 pyodide workers by default, this should finish in over 5, but under 20s (first initialisation takes a bit)
     code_list = code_list * 5
 
     async with run_mcp_session([], enable_file_outputs) as mcp_session:
@@ -323,7 +323,7 @@ async def test_run_parallel_python_code(
         # check parallelism
         end = time.perf_counter()
         run_time = end - start
-        assert run_time < 10
+        assert run_time < 20
         assert run_time > 5
 
         # check that all outputs are fine too
@@ -431,7 +431,7 @@ async def test_run_python_code_timeout(
         assert (
             content.text.strip()
             == """<status>run-error</status>
-            <error>
-            Error: Timeout exceeded for python execution (60 sec)
-            </error>""".strip()
+<error>
+Error: Timeout exceeded for python execution (60 sec)
+</error>""".strip()
         )

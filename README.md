@@ -24,7 +24,8 @@ the rest of the operating system.
 - **Complete Results**: Captures standard output, standard error, and return values
 - **Asynchronous Support**: Runs async code properly
 - **Error Handling**: Provides detailed error reports for debugging
-- **File Output**: Can output and return files & images. Useful for things like generating graphs. 
+- **Timeouts**: Supports execution time limits to prevent long-running code. Default is 60s, can be customised via CLI
+- **File Output**: Can output and return files & images. Useful for things like generating graphs.
   - **Important:** Disabled by default for backwards compatibility!
 
 _(This code was previously part of [Pydantic AI](https://github.com/pydantic/pydantic-ai) but was moved to a separate repo to make it easier to maintain.)_
@@ -50,6 +51,13 @@ where:
   does not require the client to hold a stateful connection like SSE
 - `example` will run a minimal Python script using `numpy`, useful for checking that the package is working, for the code
   to run successfully, you'll need to install `numpy` using `uvx mcp-run-python --deps numpy example`
+
+---
+
+For all available options,
+```bash
+uvx mcp-run-python --help
+```
 
 ## Usage with Pydantic AI
 

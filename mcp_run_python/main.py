@@ -57,10 +57,9 @@ def run_mcp_server(
         pyodide_worker_wait_timeout_sec=pyodide_worker_wait_timeout_sec,
         pyodide_code_run_timeout_sec=pyodide_code_run_timeout_sec,
     ) as env:
-        logger.info(env)
         logger.info(f'Running with file output support {"enabled" if enable_file_outputs else "disabled"}.')
         if mode == 'streamable_http':
-            logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
+            logger.info('Running mcp-run-python via %s on port %d...', mode, str(http_port))
         else:
             logger.info('Running mcp-run-python via %s...', mode)
 

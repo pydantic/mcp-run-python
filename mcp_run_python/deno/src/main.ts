@@ -38,7 +38,8 @@ export async function main() {
       'pyodide-worker-wait-timeout-sec': '60',
     },
   })
-  console.error(flags)
+
+  console.debug(flags)
   const deps = flags.deps?.split(',') ?? []
   if (args.length >= 1) {
     if (args[0] === 'stdio') {
