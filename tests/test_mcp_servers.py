@@ -304,7 +304,7 @@ async def test_install_run_python_code() -> None:
                 """,
             ],
             10,
-            30,
+            40,
         ),
         pytest.param(
             [
@@ -314,7 +314,7 @@ async def test_install_run_python_code() -> None:
                 """,
             ],
             500,
-            30,
+            40,
         ),
     ],
 )
