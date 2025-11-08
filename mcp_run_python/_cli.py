@@ -27,6 +27,25 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         '--disable-networking', action='store_true', help='Disable networking during execution of python code'
     )
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--enable-file-outputs', action='store_true', help='Enable file output functionality')
+    parser.add_argument(
+        '--pyodide-max-workers',
+        help='How many pyodide workers should be spawned at a time max. This is the amount of concurrent function executions you can have. Default: 10',
+        default=10,
+        type=int,
+    )
+    parser.add_argument(
+        '--pyodide-code-run-timeout-sec',
+        help='How long the code execution is allowed to last. Default: 60 seconds',
+        default=60,
+        type=int,
+    )
+    parser.add_argument(
+        '--pyodide-worker-wait-timeout-sec',
+        help='How many long pyodide should wait for a free worker. Default: 60 seconds',
+        default=60,
+        type=int,
+    )
     parser.add_argument('--version', action='store_true', help='Show version and exit')
     parser.add_argument(
         'mode',
@@ -53,6 +72,10 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             http_port=args.port,
             dependencies=deps,
             deps_log_handler=deps_log_handler,
+            enable_file_outputs=args.enable_file_outputs,
+            pyodide_max_workers=args.pyodide_max_workers,
+            pyodide_worker_wait_timeout_sec=args.pyodide_worker_wait_timeout_sec,
+            pyodide_code_run_timeout_sec=args.pyodide_code_run_timeout_sec,
         )
         return return_code
     else:

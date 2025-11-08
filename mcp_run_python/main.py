@@ -26,6 +26,10 @@ def run_mcp_server(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
+    pyodide_max_workers: int = 10,
+    pyodide_worker_wait_timeout_sec: int = 60,
+    pyodide_code_run_timeout_sec: int = 60,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -36,6 +40,10 @@ def run_mcp_server(
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
+        enable_file_outputs: Whether to enable output files
+        pyodide_max_workers: How many pyodide workers to max use at the same time
+        pyodide_code_run_timeout_sec: How long to wait for pyodide code to run in seconds.
+        pyodide_worker_wait_timeout_sec: How long to wait for a free pyodide worker in seconds.
     """
     with prepare_deno_env(
         mode,
@@ -44,9 +52,14 @@ def run_mcp_server(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        enable_file_outputs=enable_file_outputs,
+        pyodide_max_workers=pyodide_max_workers,
+        pyodide_worker_wait_timeout_sec=pyodide_worker_wait_timeout_sec,
+        pyodide_code_run_timeout_sec=pyodide_code_run_timeout_sec,
     ) as env:
+        logger.info(f'Running with file output support {"enabled" if enable_file_outputs else "disabled"}.')
         if mode == 'streamable_http':
-            logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
+            logger.info('Running mcp-run-python via %s on port %d...', mode, str(http_port))
         else:
             logger.info('Running mcp-run-python via %s...', mode)
 
@@ -74,6 +87,10 @@ def prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
+    pyodide_max_workers: int = 10,
+    pyodide_worker_wait_timeout_sec: int = 60,
+    pyodide_code_run_timeout_sec: int = 60,
 ) -> Iterator[DenoEnv]:
     """Prepare the deno environment for running the mcp-run-python server with Deno.
 
@@ -89,6 +106,10 @@ def prepare_deno_env(
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether the prepared DenoEnv should allow networking when running code.
             Note that we always allow networking during environment initialization to install dependencies.
+        enable_file_outputs: Whether to enable output files
+        pyodide_max_workers: How many pyodide workers to max use at the same time
+        pyodide_code_run_timeout_sec: How long to wait for pyodide code to run in seconds.
+        pyodide_worker_wait_timeout_sec: How long to wait for a free pyodide worker in seconds.
 
     Returns:
         Yields the deno environment details.
@@ -98,6 +119,7 @@ def prepare_deno_env(
         src = Path(__file__).parent / 'deno'
         logger.debug('Copying from %s to %s...', src, cwd)
         shutil.copytree(src, cwd)
+        (cwd / 'output_files').mkdir()
         logger.info('Installing dependencies %s...', dependencies)
 
         args = 'deno', *_deno_install_args(dependencies)
@@ -121,6 +143,10 @@ def prepare_deno_env(
             dependencies=dependencies,
             return_mode=return_mode,
             allow_networking=allow_networking,
+            enable_file_outputs=enable_file_outputs,
+            pyodide_max_workers=pyodide_max_workers,
+            pyodide_worker_wait_timeout_sec=pyodide_worker_wait_timeout_sec,
+            pyodide_code_run_timeout_sec=pyodide_code_run_timeout_sec,
         )
         yield DenoEnv(cwd, args)
 
@@ -137,6 +163,10 @@ async def async_prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
+    pyodide_max_workers: int = 10,
+    pyodide_worker_wait_timeout_sec: int = 60,
+    pyodide_code_run_timeout_sec: int = 60,
 ) -> AsyncIterator[DenoEnv]:
     """Async variant of `prepare_deno_env`."""
     ct = await _asyncify(
@@ -147,6 +177,10 @@ async def async_prepare_deno_env(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        enable_file_outputs=enable_file_outputs,
+        pyodide_max_workers=pyodide_max_workers,
+        pyodide_worker_wait_timeout_sec=pyodide_worker_wait_timeout_sec,
+        pyodide_code_run_timeout_sec=pyodide_code_run_timeout_sec,
     )
     try:
         yield await _asyncify(ct.__enter__)
@@ -176,17 +210,27 @@ def _deno_run_args(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
+    enable_file_outputs: bool = False,
+    pyodide_max_workers: int = 10,
+    pyodide_worker_wait_timeout_sec: int = 60,
+    pyodide_code_run_timeout_sec: int = 60,
 ) -> list[str]:
     args = ['run']
     if allow_networking:
         args += ['--allow-net']
     args += [
-        '--allow-read=./node_modules',
+        '--allow-read=./node_modules,./output_files',
+        '--allow-write=./output_files',
         '--node-modules-dir=auto',
         'src/main.ts',
         mode,
         f'--return-mode={return_mode}',
+        f'--pyodide-max-workers={pyodide_max_workers}',
+        f'--pyodide-worker-wait-timeout-sec={pyodide_worker_wait_timeout_sec}',
+        f'--pyodide-code-run-timeout-sec={pyodide_code_run_timeout_sec}',
     ]
+    if enable_file_outputs:
+        args += ['--enable-file-outputs']
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
     if http_port is not None:

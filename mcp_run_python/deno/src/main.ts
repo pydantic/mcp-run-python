@@ -20,17 +20,49 @@ const VERSION = '0.0.13'
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
-    string: ['deps', 'return-mode', 'port'],
-    default: { port: '3001', 'return-mode': 'xml' },
+    string: [
+      'deps',
+      'return-mode',
+      'port',
+      'pyodide-max-workers',
+      'pyodide-code-run-timeout-sec',
+      'pyodide-worker-wait-timeout-sec',
+    ],
+    boolean: ['enable-file-outputs'],
+    default: {
+      port: '3001',
+      'return-mode': 'xml',
+      'enable-file-outputs': false,
+      'pyodide-max-workers': '10',
+      'pyodide-code-run-timeout-sec': '60',
+      'pyodide-worker-wait-timeout-sec': '60',
+    },
   })
+
+  console.debug(flags)
   const deps = flags.deps?.split(',') ?? []
   if (args.length >= 1) {
     if (args[0] === 'stdio') {
-      await runStdio(deps, flags['return-mode'])
+      await runStdio(
+        deps,
+        flags['return-mode'],
+        flags['enable-file-outputs'],
+        parseInt(flags['pyodide-max-workers']),
+        parseInt(flags['pyodide-code-run-timeout-sec']),
+        parseInt(flags['pyodide-worker-wait-timeout-sec']),
+      )
       return
     } else if (args[0] === 'streamable_http') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'])
+      runStreamableHttp(
+        port,
+        deps,
+        flags['return-mode'],
+        flags['enable-file-outputs'],
+        parseInt(flags['pyodide-max-workers']),
+        parseInt(flags['pyodide-code-run-timeout-sec']),
+        parseInt(flags['pyodide-worker-wait-timeout-sec']),
+      )
       return
     } else if (args[0] === 'example') {
       await example(deps)
@@ -57,7 +89,14 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(deps: string[], returnMode: string): McpServer {
+function createServer(
+  deps: string[],
+  returnMode: string,
+  enableFileOutputs: boolean,
+  pyodideMaxWorkers: number,
+  pyodideCodeRunTimeoutSec: number,
+  pyodideWorkerWaitTimeoutSec: number,
+): McpServer {
   const runCode = new RunCode()
   const server = new McpServer(
     {
@@ -72,12 +111,17 @@ function createServer(deps: string[], returnMode: string): McpServer {
     },
   )
 
-  const toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
+  let toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
 
-The code may be async, and the value on the last line will be returned as the return value.
-
-The code will be executed with Python 3.13.
+### Guidelines
+- The code may be async, and the value on the last line will be returned as the return value.
+- The code will be executed with Python 3.13 using pyodide - so adapt your code if needed.
+- You code must be executed within a timeout. You have ${pyodideCodeRunTimeoutSec} seconds before the run is canceled.
+- You have these python packages installed: \`${deps}\`
 `
+  if (enableFileOutputs) {
+    toolDescription += '- To output files or images, save them in the "/output_files" folder.\n'
+  }
 
   let setLogLevel: LoggingLevel = 'emergency'
 
@@ -110,11 +154,31 @@ The code will be executed with Python 3.13.
         { name: 'main.py', content: python_code },
         global_variables,
         returnMode !== 'xml',
+        enableFileOutputs,
+        pyodideMaxWorkers,
+        pyodideCodeRunTimeoutSec,
+        pyodideWorkerWaitTimeoutSec,
       )
       await Promise.all(logPromises)
-      return {
-        content: [{ type: 'text', text: returnMode === 'xml' ? asXml(result) : asJson(result) }],
+      const mcpResponse: any[] = []
+      mcpResponse.push({ type: 'text', text: returnMode === 'xml' ? asXml(result) : asJson(result) })
+
+      // Add the Resources - if there are any
+      if (result.status === 'success') {
+        for (const entry of result.embeddedResources) {
+          mcpResponse.push({
+            type: 'resource',
+            resource: {
+              uri: 'file://_', // not providing a file url, as enabling resources is optional according to MCP spec: https://modelcontextprotocol.io/specification/2025-06-18/server/tools#embedded-resources
+              name: entry.name,
+              mimeType: entry.mimeType,
+              blob: entry.blob,
+            },
+          })
+        }
       }
+
+      return { content: mcpResponse }
     },
   )
   return server
@@ -167,14 +231,30 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[], returnMode: string) {
+function runStreamableHttp(
+  port: number,
+  deps: string[],
+  returnMode: string,
+  enableFileOutputs: boolean,
+  pyodideMaxWorkers: number,
+  pyodideCodeRunTimeoutSec: number,
+  pyodideWorkerWaitTimeoutSec: number,
+) {
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
-  const mcpServer = createServer(deps, returnMode)
+  const mcpServer = createServer(
+    deps,
+    returnMode,
+    enableFileOutputs,
+    pyodideMaxWorkers,
+    pyodideCodeRunTimeoutSec,
+    pyodideWorkerWaitTimeoutSec,
+  )
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
   const server = http.createServer(async (req, res) => {
     const url = httpGetUrl(req)
     let pathMatch = false
+
     function match(method: string, path: string): boolean {
       if (url.pathname === path) {
         pathMatch = true
@@ -252,8 +332,22 @@ function runStreamableHttp(port: number, deps: string[], returnMode: string) {
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio(deps: string[], returnMode: string) {
-  const mcpServer = createServer(deps, returnMode)
+async function runStdio(
+  deps: string[],
+  returnMode: string,
+  enableFileOutputs: boolean,
+  pyodideMaxWorkers: number,
+  pyodideCodeRunTimeoutSec: number,
+  pyodideWorkerWaitTimeoutSec: number,
+) {
+  const mcpServer = createServer(
+    deps,
+    returnMode,
+    enableFileOutputs,
+    pyodideMaxWorkers,
+    pyodideCodeRunTimeoutSec,
+    pyodideWorkerWaitTimeoutSec,
+  )
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }

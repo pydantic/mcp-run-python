@@ -24,6 +24,9 @@ the rest of the operating system.
 - **Complete Results**: Captures standard output, standard error, and return values
 - **Asynchronous Support**: Runs async code properly
 - **Error Handling**: Provides detailed error reports for debugging
+- **Timeouts**: Supports execution time limits to prevent long-running code. Default is 60s, can be customised via CLI
+- **File Output**: Can output and return files & images. Useful for things like generating graphs.
+  - **Important:** Disabled by default for backwards compatibility!
 
 _(This code was previously part of [Pydantic AI](https://github.com/pydantic/pydantic-ai) but was moved to a separate repo to make it easier to maintain.)_
 
@@ -34,7 +37,7 @@ To use this server, you must have both Python and [Deno](https://deno.com/) inst
 The server can be run with `deno` installed using `uvx`:
 
 ```bash
-uvx mcp-run-python [-h] [--version] [--port PORT] [--deps DEPS] {stdio,streamable-http,example}
+uvx mcp-run-python [-h] [--version] [--port PORT] [--deps DEPS] [--enable-file-outputs] {stdio,streamable-http,example}
 ```
 
 where:
@@ -48,6 +51,13 @@ where:
   does not require the client to hold a stateful connection like SSE
 - `example` will run a minimal Python script using `numpy`, useful for checking that the package is working, for the code
   to run successfully, you'll need to install `numpy` using `uvx mcp-run-python --deps numpy example`
+
+---
+
+For all available options,
+```bash
+uvx mcp-run-python --help
+```
 
 ## Usage with Pydantic AI
 
@@ -105,7 +115,7 @@ logfire.instrument_pydantic_ai()
 
 
 async def main():
-    async with async_prepare_deno_env('stdio') as deno_env:
+    async with async_prepare_deno_env('stdio', enable_file_outputs=True) as deno_env:
         server = MCPServerStdio('deno', args=deno_env.args, cwd=deno_env.cwd, timeout=10)
         agent = Agent('claude-3-5-haiku-latest', toolsets=[server])
         async with agent:
@@ -165,3 +175,10 @@ edit the filesystem.
 * `deno` is then run with read-only permissions to the `node_modules` directory to run untrusted code.
 
 Dependencies must be provided when initializing the server so they can be installed in the first step.
+
+## File Outputs
+
+`mcp_run_python` supports outputting files using [embedded resources](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#embedded-resources).
+This can be very useful when having the LLM do complex calculation to create some csv file, or when the code it writes generates binary blobs like images - for example when interacting with matplotlib.
+
+To preserve backwards compatibility, this is an **opt-in** feature and needs to be enabled. Pass `--enable-file-outputs` to your run command to enable this.

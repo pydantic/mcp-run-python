@@ -1,6 +1,9 @@
 // deno-lint-ignore-file no-explicit-any
 import { loadPyodide, type PyodideInterface } from 'pyodide'
 import { preparePythonCode } from './prepareEnvCode.ts'
+import { randomBytes } from 'node:crypto'
+import mime from 'mime-types'
+import { encodeBase64 } from '@std/encoding/base64'
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
 
 export interface CodeFile {
@@ -13,86 +16,171 @@ interface PrepResult {
   preparePyEnv: PreparePyEnv
   sys: any
   prepareStatus: PrepareSuccess | PrepareError
+  output: string[]
 }
 
-export class RunCode {
-  private output: string[] = []
-  private pyodide?: PyodideInterface
-  private preparePyEnv?: PreparePyEnv
-  private prepPromise?: Promise<PrepResult>
+interface PyodideWorker extends PrepResult {
+  id: number
+  pyodideInterruptBuffer: Uint8Array
+  inUse: boolean
+}
 
-  async run(
+/*
+ * Class that instantiates pyodide and keeps multiple instances
+ * There need to be multiple instances, as file system mounting to a standard directory (which is needed for the LLM), cannot be easily done without mixing files
+ * Now, every process has their own file system & they get looped around
+ */
+class PyodideAccess {
+  // context manager to get a pyodide instance (with timeout & max members)
+  public async withPyodideInstance<T>(
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
-    file?: CodeFile,
-    globals?: Record<string, any>,
-    alwaysReturnJson: boolean = false,
-  ): Promise<RunSuccess | RunError> {
-    let pyodide: PyodideInterface
-    let sys: any
-    let prepareStatus: PrepareSuccess | PrepareError | undefined
-    let preparePyEnv: PreparePyEnv
-    if (this.pyodide && this.preparePyEnv) {
-      pyodide = this.pyodide
-      preparePyEnv = this.preparePyEnv
-      sys = pyodide.pyimport('sys')
-    } else {
-      if (!this.prepPromise) {
-        this.prepPromise = this.prepEnv(dependencies, log)
-      }
-      // TODO is this safe if the promise has already been accessed? it seems to work fine
-      const prep = await this.prepPromise
-      pyodide = prep.pyodide
-      preparePyEnv = prep.preparePyEnv
-      sys = prep.sys
-      prepareStatus = prep.prepareStatus
-    }
-
-    if (prepareStatus && prepareStatus.kind == 'error') {
-      return {
-        status: 'install-error',
-        output: this.takeOutput(sys),
-        error: prepareStatus.message,
-      }
-    } else if (file) {
-      try {
-        const rawValue = await pyodide.runPythonAsync(file.content, {
-          globals: pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
-          filename: file.name,
-        })
-        return {
-          status: 'success',
-          output: this.takeOutput(sys),
-          returnValueJson: preparePyEnv.dump_json(rawValue, alwaysReturnJson),
-        }
-      } catch (err) {
-        return {
-          status: 'run-error',
-          output: this.takeOutput(sys),
-          error: formatError(err),
-        }
-      }
-    } else {
-      return {
-        status: 'success',
-        output: this.takeOutput(sys),
-        returnValueJson: null,
-      }
+    maximumInstances: number,
+    pyodideWorkerWaitTimeoutSec: number,
+    fn: (w: PyodideWorker) => Promise<T>,
+  ): Promise<T> {
+    const w = await this.getPyodideInstance(dependencies, log, maximumInstances, pyodideWorkerWaitTimeoutSec)
+    try {
+      return await fn(w)
+    } finally {
+      this.releasePyodideInstance(w.id)
     }
   }
 
-  async prepEnv(
+  private pyodideInstances: { [workerId: number]: PyodideWorker } = {}
+  private nextWorkerId = 1
+  private creatingCount = 0
+
+  // after code is run, this releases the worker again to the pool for other codes to run
+  private releasePyodideInstance(workerId: number): void {
+    const worker = this.pyodideInstances[workerId]
+    if (!worker) {
+      throw new Error(`Trying to release unknown pyodide worker ${workerId}`)
+    }
+
+    // clear interrupt buffer in case it was used & clear output
+    worker.pyodideInterruptBuffer[0] = 0
+    worker.output.length = 0
+
+    // if sb is waiting, take the first worker from queue & keep status as "inUse"
+    const waiter = this.waitQueue.shift()
+    if (waiter) {
+      clearTimeout(waiter.timer)
+      worker.inUse = true
+      waiter.resolve(worker)
+    } else {
+      worker.inUse = false
+    }
+  }
+
+  // main logic of getting a pyodide instance. Will reuse if possible, otherwise create (up to limit)
+  private async getPyodideInstance(
+    dependencies: string[],
+    log: (level: LoggingLevel, data: string) => void,
+    maximumInstances: number,
+    pyodideWorkerWaitTimeoutSec: number,
+  ): Promise<PyodideWorker> {
+    // 1) if possible, take a free - already initialised - worker
+    const free = this.tryAcquireFree()
+    if (free) return free
+
+    // 2) if none is free, check that we are not over capacity already
+    const currentCount = Object.keys(this.pyodideInstances).length
+    if (currentCount + this.creatingCount < maximumInstances) {
+      this.creatingCount++
+      try {
+        const id = this.nextWorkerId++
+        const worker = await this.createPyodideWorker(id, dependencies, log)
+
+        // cool, created a new one so let's use that one
+        worker.inUse = true
+        this.pyodideInstances[id] = worker
+        return worker
+      } catch (err) {
+        // Need to make sure the creation gets reduced again, so simply re-throwing
+        throw err
+      } finally {
+        this.creatingCount--
+      }
+    }
+
+    // 3) we have the maximum worker, poll periodically until timeout for a free one
+    return await new Promise<PyodideWorker>((resolve, reject) => {
+      const start = Date.now()
+      const poll = () => {
+        const free = this.tryAcquireFree()
+        if (free) {
+          clearTimeout(timer)
+          resolve(free)
+          return
+        }
+        if (Date.now() - start >= pyodideWorkerWaitTimeoutSec * 1000) {
+          reject(new Error('Timeout: no free Pyodide worker'))
+          return
+        }
+        timer = setTimeout(poll, 1000)
+      }
+      let timer = setTimeout(poll, 1000)
+      this.waitQueue.push({ resolve, reject, timer })
+    })
+  }
+
+  private waitQueue: {
+    resolve: (w: PyodideWorker) => void
+    reject: (e: unknown) => void
+    timer: ReturnType<typeof setTimeout>
+  }[] = []
+
+  private tryAcquireFree(): PyodideWorker | undefined {
+    for (const w of Object.values(this.pyodideInstances)) {
+      if (!w.inUse) {
+        w.inUse = true
+        return w
+      }
+    }
+    return undefined
+  }
+
+  // this creates the pyodide worker from scratch
+  private async createPyodideWorker(
+    id: number,
+    dependencies: string[],
+    log: (level: LoggingLevel, data: string) => void,
+  ): Promise<PyodideWorker> {
+    const prepPromise = this.prepEnv(dependencies, log)
+    const prep = await prepPromise
+
+    // setup the interrupt buffer to be able to cancel the task
+    const interruptBuffer = new Uint8Array(new SharedArrayBuffer(1))
+    prep.pyodide.setInterruptBuffer(interruptBuffer)
+
+    return {
+      id,
+      pyodide: prep.pyodide,
+      pyodideInterruptBuffer: interruptBuffer,
+      sys: prep.sys,
+      prepareStatus: prep.prepareStatus,
+      preparePyEnv: prep.preparePyEnv,
+      output: prep.output,
+      inUse: false,
+    }
+  }
+
+  // load pyodide and install dependencies
+  private async prepEnv(
     dependencies: string[],
     log: (level: LoggingLevel, data: string) => void,
   ): Promise<PrepResult> {
+    const output: string[] = []
+
     const pyodide = await loadPyodide({
       stdout: (msg) => {
         log('info', msg)
-        this.output.push(msg)
+        output.push(msg)
       },
       stderr: (msg) => {
         log('warning', msg)
-        this.output.push(msg)
+        output.push(msg)
       },
     })
 
@@ -104,7 +192,7 @@ export class RunCode {
         messageCallback: (msg: string) => log('debug', msg),
         errorCallback: (msg: string) => {
           log('error', msg)
-          this.output.push(`install error: ${msg}`)
+          output.push(`install error: ${msg}`)
         },
         ...options,
       })
@@ -128,16 +216,155 @@ export class RunCode {
       preparePyEnv,
       sys,
       prepareStatus,
+      output,
+    }
+  }
+}
+
+export class RunCode {
+  private pyodideAccess: PyodideAccess = new PyodideAccess()
+
+  async run(
+    dependencies: string[],
+    log: (level: LoggingLevel, data: string) => void,
+    file?: CodeFile,
+    globals?: Record<string, any>,
+    alwaysReturnJson: boolean = false,
+    enableFileOutputs: boolean = false,
+    pyodideMaxWorkers: number = 10,
+    pyodideCodeRunTimeoutSec: number = 60,
+    pyodideWorkerWaitTimeoutSec: number = 60,
+  ): Promise<RunSuccess | RunError> {
+    // get a pyodide instance for this job
+    try {
+      return await this.pyodideAccess.withPyodideInstance(
+        dependencies,
+        log,
+        pyodideMaxWorkers,
+        pyodideWorkerWaitTimeoutSec,
+        async (pyodideWorker) => {
+          if (pyodideWorker.prepareStatus && pyodideWorker.prepareStatus.kind == 'error') {
+            return {
+              status: 'install-error',
+              output: this.takeOutput(pyodideWorker),
+              error: pyodideWorker.prepareStatus.message,
+            }
+          } else if (file) {
+            try {
+              // defaults in case file output is not enabled
+              let folderPath = ''
+              let files: Resource[] = []
+
+              if (enableFileOutputs) {
+                // make the temp file system for pyodide to use
+                const folderName = randomBytes(20).toString('hex').slice(0, 20)
+                folderPath = `./output_files/${folderName}`
+                await Deno.mkdir(folderPath, { recursive: true })
+                pyodideWorker.pyodide.mountNodeFS('/output_files', folderPath)
+              }
+
+              // run the code with pyodide including a timeout
+              let timeoutId: any
+              const rawValue = await Promise.race([
+                pyodideWorker.pyodide.runPythonAsync(file.content, {
+                  globals: pyodideWorker.pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
+                  filename: file.name,
+                }),
+                new Promise((_, reject) => {
+                  timeoutId = setTimeout(() => {
+                    // after the time passes signal SIGINT to stop execution
+                    // 2 stands for SIGINT
+                    pyodideWorker.pyodideInterruptBuffer[0] = 2
+                    reject(new Error(`Timeout exceeded for python execution (${pyodideCodeRunTimeoutSec} sec)`))
+                  }, pyodideCodeRunTimeoutSec * 1000)
+                }),
+              ])
+              clearTimeout(timeoutId)
+
+              if (enableFileOutputs) {
+                // check files that got saved
+                files = await this.readAndDeleteFiles(folderPath)
+                pyodideWorker.pyodide.FS.unmount('/output_files')
+              }
+
+              return {
+                status: 'success',
+                output: this.takeOutput(pyodideWorker),
+                returnValueJson: pyodideWorker.preparePyEnv.dump_json(rawValue, alwaysReturnJson),
+                embeddedResources: files,
+              }
+            } catch (err) {
+              try {
+                pyodideWorker.pyodide.FS.unmount('/output_files')
+              } catch (_) {
+                // we need to make sure unmount is attempted, but ignore errors here
+              }
+
+              console.log(err)
+              return {
+                status: 'run-error',
+                output: this.takeOutput(pyodideWorker),
+                error: formatError(err),
+              }
+            }
+          } else {
+            return {
+              status: 'success',
+              output: this.takeOutput(pyodideWorker),
+              returnValueJson: null,
+              embeddedResources: [],
+            }
+          }
+        },
+      )
+    } catch (err) {
+      console.error(err)
+      return {
+        status: 'fatal-runtime-error',
+        output: [],
+        error: formatError(err),
+      }
     }
   }
 
-  private takeOutput(sys: any): string[] {
-    sys.stdout.flush()
-    sys.stderr.flush()
-    const output = this.output
-    this.output = []
-    return output
+  async readAndDeleteFiles(folderPath: string): Promise<Resource[]> {
+    const results: Resource[] = []
+    for await (const file of Deno.readDir(folderPath)) {
+      // Skip directories
+      if (!file.isFile) continue
+
+      const fileName = file.name
+      const filePath = `${folderPath}/${fileName}`
+      const mimeType = mime.lookup(fileName)
+      const fileData = await Deno.readFile(filePath)
+
+      // Convert binary to Base64
+      const base64Encoded = encodeBase64(fileData)
+
+      results.push({
+        name: fileName,
+        mimeType: mimeType,
+        blob: base64Encoded,
+      })
+    }
+
+    // Now delete the file folder - otherwise they add up :)
+    await Deno.remove(folderPath, { recursive: true })
+
+    return results
   }
+
+  private takeOutput(pyodideWorker: PyodideWorker): string[] {
+    pyodideWorker.sys.stdout.flush()
+    pyodideWorker.sys.stderr.flush()
+    return [...pyodideWorker.output]
+  }
+}
+
+interface Resource {
+  name: string
+  mimeType: string
+  blob: string
 }
 
 interface RunSuccess {
@@ -145,10 +372,11 @@ interface RunSuccess {
   // we could record stdout and stderr separately, but I suspect simplicity is more important
   output: string[]
   returnValueJson: string | null
+  embeddedResources: Resource[]
 }
 
 interface RunError {
-  status: 'install-error' | 'run-error'
+  status: 'install-error' | 'run-error' | 'fatal-runtime-error'
   output: string[]
   error: string
 }
@@ -209,10 +437,12 @@ interface PrepareSuccess {
   kind: 'success'
   dependencies?: string[]
 }
+
 interface PrepareError {
   kind: 'error'
   message: string
 }
+
 interface PreparePyEnv {
   prepare_env: (files: CodeFile[]) => Promise<PrepareSuccess | PrepareError>
   dump_json: (value: any, always_return_json: boolean) => string | null

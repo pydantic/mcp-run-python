@@ -12,7 +12,7 @@ a
 
 
 async def main():
-    async with async_prepare_deno_env('stdio', dependencies=['numpy']) as deno_env:
+    async with async_prepare_deno_env('stdio', dependencies=['numpy'], enable_file_outputs=True) as deno_env:
         server_params = StdioServerParameters(command='deno', args=deno_env.args, cwd=deno_env.cwd)
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
