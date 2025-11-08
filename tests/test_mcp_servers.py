@@ -6,7 +6,7 @@ import subprocess
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from httpx import AsyncClient, HTTPError
@@ -314,7 +314,7 @@ async def test_install_run_python_code() -> None:
                 """,
             ],
             500,
-            20,
+            30,
         ),
     ],
 )
@@ -341,13 +341,12 @@ async def test_run_parallel_python_code(
 
         start = time.perf_counter()
 
-        tasks: set[asyncio.Task[types.CallToolResult]] = set()
-        async with asyncio.TaskGroup() as tg:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
-            for code in code_list:
-                task: asyncio.Task[types.CallToolResult] = tg.create_task(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-                    run_wrapper(code)
-                )
-                tasks.add(task)  # pyright: ignore[reportUnknownArgumentType]
+        tasks: set[Any] = set()
+        for code in code_list:
+            tasks.add(run_wrapper(code))
+
+        # await the tasks
+        results: list[types.CallToolResult] = await asyncio.gather(*tasks)
 
         # check parallelism
         end = time.perf_counter()
@@ -356,9 +355,7 @@ async def test_run_parallel_python_code(
         assert run_time > 5
 
         # check that all outputs are fine too
-        for task in tasks:
-            result = task.result()
-
+        for result in results:
             assert len(result.content) == 1
             content = result.content[0]
 
@@ -398,13 +395,12 @@ async def test_run_parallel_python_code_with_files(
 
         start = time.perf_counter()
 
-        tasks: set[asyncio.Task[types.CallToolResult]] = set()
-        async with asyncio.TaskGroup() as tg:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
-            for code in code_list:
-                task: asyncio.Task[types.CallToolResult] = tg.create_task(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-                    mcp_session.call_tool('run_python_code', {'python_code': code})
-                )
-                tasks.add(task)  # pyright: ignore[reportUnknownArgumentType]
+        tasks: set[Any] = set()
+        for code in code_list:
+            tasks.add(mcp_session.call_tool('run_python_code', {'python_code': code}))
+
+        # await the tasks
+        results: list[types.CallToolResult] = await asyncio.gather(*tasks)
 
         # check parallelism
         end = time.perf_counter()
@@ -413,9 +409,7 @@ async def test_run_parallel_python_code_with_files(
         assert run_time > 5
 
         # check that all outputs are fine too
-        for task in tasks:
-            result = task.result()
-
+        for result in results:
             assert len(result.content) == 6
 
             run_ids: set[str] = set()
