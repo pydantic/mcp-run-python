@@ -285,27 +285,56 @@ async def test_install_run_python_code() -> None:
 
 
 @pytest.mark.parametrize('enable_file_outputs', [pytest.param(True), pytest.param(False)])
+@pytest.mark.parametrize(
+    'code_list,multiplicator,max_time_needed',
+    [
+        pytest.param(
+            [
+                """
+                import time
+                time.sleep(5)
+                x=11
+                x
+                """,
+                """
+                import asyncio
+                await asyncio.sleep(5)
+                x=11
+                x
+                """,
+            ],
+            10,
+            30,
+        ),
+        pytest.param(
+            [
+                """
+                x=11
+                x
+                """,
+            ],
+            500,
+            20,
+        ),
+    ],
+)
 async def test_run_parallel_python_code(
     run_mcp_session: Callable[[list[str], bool], AbstractAsyncContextManager[ClientSession]],
     enable_file_outputs: bool,
+    code_list: list[str],
+    multiplicator: int,
+    max_time_needed: int,
 ) -> None:
-    code_list = [
-        """
-        import time
-        time.sleep(5)
-        x=11
-        x
-        """,
-        """
-        import asyncio
-        await asyncio.sleep(5)
-        x=11
-        x
-        """,
-    ]
     # Run this a couple times (10) in parallel
-    # As we have 10 pyodide workers by default, this should finish in over 5, but under 20s (first initialisation takes a bit)
-    code_list = code_list * 5
+    # As we have 10 pyodide workers by default, this should finish in under the needed time if you add the tasks itself (first initialisation takes a bit - especially for 10 workers)
+    code_list = code_list * multiplicator
+
+    concurrency_limiter = asyncio.Semaphore(50)
+
+    async def run_wrapper(code: str):
+        # limit concurrency to avoid overwhelming the server with 500 tasks at once :D
+        async with concurrency_limiter:
+            return await mcp_session.call_tool('run_python_code', {'python_code': code})
 
     async with run_mcp_session([], enable_file_outputs) as mcp_session:
         await mcp_session.initialize()
@@ -316,14 +345,14 @@ async def test_run_parallel_python_code(
         async with asyncio.TaskGroup() as tg:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
             for code in code_list:
                 task: asyncio.Task[types.CallToolResult] = tg.create_task(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-                    mcp_session.call_tool('run_python_code', {'python_code': code})
+                    run_wrapper(code)
                 )
                 tasks.add(task)  # pyright: ignore[reportUnknownArgumentType]
 
         # check parallelism
         end = time.perf_counter()
         run_time = end - start
-        assert run_time < 20
+        assert run_time < max_time_needed
         assert run_time > 5
 
         # check that all outputs are fine too
