@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture(name='run_mcp_session', params=['stdio', 'streamable_http'])
+@pytest.fixture(name='run_mcp_session', params=['stdio', 'streamable_http', 'streamable_http_stateless'])
 def fixture_run_mcp_session(
     request: pytest.FixtureRequest,
 ) -> Callable[[list[str]], AbstractAsyncContextManager[ClientSession]]:
@@ -35,9 +35,9 @@ def fixture_run_mcp_session(
                     async with ClientSession(read, write) as session:
                         yield session
         else:
-            assert request.param == 'streamable_http', request.param
+            assert request.param in ('streamable_http', 'streamable_http_stateless'), request.param
             port = 3101
-            async with async_prepare_deno_env('streamable_http', http_port=port, dependencies=deps) as env:
+            async with async_prepare_deno_env(request.param, http_port=port, dependencies=deps) as env:
                 p = subprocess.Popen(['deno', *env.args], cwd=env.cwd)
                 try:
                     url = f'http://localhost:{port}/mcp'

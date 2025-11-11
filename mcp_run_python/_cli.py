@@ -30,7 +30,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     parser.add_argument('--version', action='store_true', help='Show version and exit')
     parser.add_argument(
         'mode',
-        choices=['stdio', 'streamable-http', 'example'],
+        choices=['stdio', 'streamable-http', 'streamable-http-stateless', 'example'],
         nargs='?',
         help='Mode to run the server in.',
     )
