@@ -2,6 +2,7 @@ import asyncio
 import logging
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
@@ -26,6 +27,7 @@ def run_mcp_server(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    verbose: bool = False,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -36,7 +38,13 @@ def run_mcp_server(
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
+        verbose: Log deno outputs to CLI
     """
+
+    stdout, stderr = None, None
+    if verbose:
+        stdout, stderr = sys.stdout, sys.stderr
+
     with prepare_deno_env(
         mode,
         dependencies=dependencies,
@@ -51,7 +59,7 @@ def run_mcp_server(
             logger.info('Running mcp-run-python via %s...', mode)
 
         try:
-            p = subprocess.run(('deno', *env.args), cwd=env.cwd)
+            p = subprocess.run(('deno', *env.args), cwd=env.cwd, stdout=stdout, stderr=stderr)
         except KeyboardInterrupt:  # pragma: no cover
             logger.warning('Server stopped.')
             return 0
