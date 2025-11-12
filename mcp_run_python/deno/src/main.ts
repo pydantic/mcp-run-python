@@ -17,6 +17,126 @@ import { Buffer } from 'node:buffer'
 
 const VERSION = '0.0.13'
 
+// Tool injection support
+const EMPTY_TOOLS_RESULT = { toolNames: [], toolSchemas: {} }
+
+const ELICIT_RESPONSE_SCHEMA = z.object({
+  action: z.enum(['accept', 'decline', 'cancel']),
+  content: z.optional(z.record(z.string(), z.unknown())),
+})
+
+// Schema for tool discovery responses
+const TOOL_DISCOVERY_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['accept', 'decline', 'cancel'],
+      description: 'Action to take with the tool discovery request',
+    },
+    content: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'string',
+          description: 'JSON string containing tool_names and tool_schemas',
+        },
+      },
+      description: 'Tool discovery result data',
+    },
+  },
+  required: ['action'],
+}
+
+// Schema for tool execution responses
+const TOOL_EXECUTION_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['accept', 'decline', 'cancel'],
+      description: 'Action to take with the tool execution request',
+    },
+    content: {
+      type: 'object',
+      properties: {
+        result: {
+          type: 'string',
+          description: 'JSON string containing tool execution result',
+        },
+        error: {
+          type: 'string',
+          description: 'Error message if execution failed',
+        },
+        retry: {
+          type: 'string',
+          description: 'JSON string containing retry information if tool needs retry',
+        },
+      },
+      description: 'Tool execution result or error information',
+    },
+  },
+  required: ['action'],
+}
+
+function makeElicitationRequest(
+  server: McpServer,
+  message: string,
+  requestedSchema: Record<string, unknown>,
+): Promise<z.infer<typeof ELICIT_RESPONSE_SCHEMA>> {
+  return server.server.request(
+    {
+      method: 'elicitation/create',
+      params: { message, requestedSchema },
+    },
+    ELICIT_RESPONSE_SCHEMA,
+  )
+}
+
+async function discoverAvailableTools(
+  server: McpServer,
+): Promise<{ toolNames: string[]; toolSchemas: Record<string, Record<string, unknown>> }> {
+  try {
+    const result = await makeElicitationRequest(
+      server,
+      JSON.stringify({ action: 'discover_tools' }),
+      TOOL_DISCOVERY_RESPONSE_SCHEMA,
+    )
+
+    if (result.action === 'accept' && result.content?.data) {
+      const data = JSON.parse(result.content.data as string)
+      return {
+        toolNames: data.tool_names || [],
+        toolSchemas: data.tool_schemas || {},
+      }
+    }
+  } catch (error) {
+    console.warn('Tool discovery failed:', error)
+  }
+
+  return EMPTY_TOOLS_RESULT
+}
+
+function createToolExecutionCallback(
+  server: McpServer,
+): (message: string) => Promise<z.infer<typeof ELICIT_RESPONSE_SCHEMA>> {
+  return async (message: string) => {
+    try {
+      return await makeElicitationRequest(
+        server,
+        message,
+        TOOL_EXECUTION_RESPONSE_SCHEMA,
+      )
+    } catch (error) {
+      console.error('Tool execution failed:', error)
+      return {
+        action: 'decline',
+        content: { error: `Tool execution failed: ${error}` },
+      }
+    }
+  }
+}
+
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
@@ -87,6 +207,38 @@ The code will be executed with Python 3.13.
   })
 
   server.registerTool(
+    'discover_available_tools',
+    {
+      title: 'Discover available tools',
+      description:
+        'Discover what tools are available for injection into Python code execution environment. Call this before writing Python code to know which tools you can use.',
+      inputSchema: {},
+    },
+    async () => {
+      // Discover available tools via elicitation
+      const { toolNames: availableTools, toolSchemas } = await discoverAvailableTools(server)
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                available_tools: availableTools,
+                tool_schemas: toolSchemas,
+                usage_note:
+                  "These tools will be available as Python functions when you run Python code. Tool names with hyphens become underscores (e.g., 'web-search' -> 'web_search').",
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }
+    },
+  )
+
+  server.registerTool(
     'run_python_code',
     {
       title: 'Run Python code',
@@ -100,6 +252,20 @@ The code will be executed with Python 3.13.
     },
     async ({ python_code, global_variables }: { python_code: string; global_variables: Record<string, any> }) => {
       const logPromises: Promise<void>[] = []
+
+      // Discover available tools via elicitation
+      const { toolNames: availableTools, toolSchemas } = await discoverAvailableTools(server)
+
+      // Create elicitation callback for tool execution if tools are available
+      let toolInjectionOptions
+      if (availableTools.length > 0) {
+        toolInjectionOptions = {
+          elicitationCallback: createToolExecutionCallback(server),
+          availableTools: availableTools,
+          toolSchemas: toolSchemas,
+        }
+      }
+
       const result = await runCode.run(
         deps,
         (level, data) => {
@@ -110,6 +276,7 @@ The code will be executed with Python 3.13.
         { name: 'main.py', content: python_code },
         global_variables,
         returnMode !== 'xml',
+        toolInjectionOptions,
       )
       await Promise.all(logPromises)
       return {

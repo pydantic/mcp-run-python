@@ -1,11 +1,22 @@
 // deno-lint-ignore-file no-explicit-any
 import { loadPyodide, type PyodideInterface } from 'pyodide'
-import { preparePythonCode } from './prepareEnvCode.ts'
+import { preparePythonCode, toolInjectionCode } from './prepareEnvCode.ts'
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
 
 export interface CodeFile {
   name: string
   content: string
+}
+
+interface ElicitationResponse {
+  action: 'accept' | 'decline' | 'cancel'
+  content?: Record<string, unknown>
+}
+
+export interface ToolInjectionOptions {
+  elicitationCallback?: (message: string) => Promise<ElicitationResponse>
+  availableTools?: string[]
+  toolSchemas?: Record<string, Record<string, unknown>>
 }
 
 interface PrepResult {
@@ -27,6 +38,7 @@ export class RunCode {
     file?: CodeFile,
     globals?: Record<string, any>,
     alwaysReturnJson: boolean = false,
+    toolInjectionOptions?: ToolInjectionOptions,
   ): Promise<RunSuccess | RunError> {
     let pyodide: PyodideInterface
     let sys: any
@@ -56,8 +68,50 @@ export class RunCode {
       }
     } else if (file) {
       try {
+        // Create globals for python execution, starting with user's global_variables
+        const globalVars = { ...(globals || {}), __name__: '__main__' }
+        const globalsProxy = pyodide.toPy(globalVars)
+
+        // Setup tool injection if elicitation callback is provided
+        if (toolInjectionOptions?.elicitationCallback && toolInjectionOptions?.availableTools?.length) {
+          const dirPath = '/tmp/mcp_run_python'
+          const pathlib = pyodide.pyimport('pathlib')
+          const toolModuleName = '_tool_injection'
+          pathlib
+            .Path(`${dirPath}/${toolModuleName}.py`)
+            .write_text(toolInjectionCode)
+
+          const toolInjectionModule = pyodide.pyimport(toolModuleName)
+
+          // Create Javascript callback wrapper that handles promises
+          const jsElicitationCallback = async (message: string): Promise<ElicitationResponse> => {
+            try {
+              const result = await toolInjectionOptions.elicitationCallback!(message)
+              return result
+            } catch (error) {
+              log('error', `Elicitation callback error: ${error}`)
+
+              return {
+                action: 'decline',
+                content: { error: `Elicitation failed: ${error}` },
+              }
+            }
+          }
+
+          // Convert to Python and inject tools
+          const pyCallback = pyodide.toPy(jsElicitationCallback)
+          const pyTools = pyodide.toPy(toolInjectionOptions.availableTools)
+          const pyToolSchemas = pyodide.toPy(toolInjectionOptions.toolSchemas || {})
+          toolInjectionModule.inject_tool_functions(globalsProxy, pyTools, pyCallback, pyToolSchemas)
+
+          log(
+            'info',
+            `Tool injection enabled for: ${toolInjectionOptions.availableTools.join(', ')}`,
+          )
+        }
+
         const rawValue = await pyodide.runPythonAsync(file.content, {
-          globals: pyodide.toPy({ ...(globals || {}), __name__: '__main__' }),
+          globals: globalsProxy,
           filename: file.name,
         })
         return {
