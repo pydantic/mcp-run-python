@@ -15,7 +15,7 @@ __all__ = 'run_mcp_server', 'DenoEnv', 'prepare_deno_env', 'async_prepare_deno_e
 
 logger = logging.getLogger(__name__)
 LoggingLevel = Literal['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency']
-Mode = Literal['stdio', 'streamable_http', 'example']
+Mode = Literal['stdio', 'streamable_http', 'streamable_http_stateless', 'example']
 LogHandler = Callable[[LoggingLevel, str], None]
 
 
@@ -53,7 +53,7 @@ def run_mcp_server(
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
     ) as env:
-        if mode == 'streamable_http':
+        if mode in ('streamable_http', 'streamable_http_stateless'):
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
         else:
             logger.info('Running mcp-run-python via %s...', mode)
@@ -198,10 +198,10 @@ def _deno_run_args(
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
     if http_port is not None:
-        if mode == 'streamable_http':
+        if mode in ('streamable_http', 'streamable_http_stateless'):
             args.append(f'--port={http_port}')
         else:
-            raise ValueError('Port is only supported for `streamable_http` mode')
+            raise ValueError('Port is only supported for `streamable_http` modes')
     return args
 
 
