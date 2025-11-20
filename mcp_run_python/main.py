@@ -85,7 +85,7 @@ def prepare_deno_env(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal['json', 'xml'] = 'xml',
+    return_mode: Literal["json", "xml"] = "xml",
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
 ) -> Iterator[DenoEnv]:
@@ -128,7 +128,9 @@ def prepare_deno_env(
                 stdout.append(line)
         p.wait()
         if p.returncode != 0:
-            raise RuntimeError(f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}')
+            raise RuntimeError(
+                f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}'
+            )
 
         args = _deno_run_args(
             mode,
@@ -151,7 +153,7 @@ async def async_prepare_deno_env(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal['json', 'xml'] = 'xml',
+    return_mode: Literal["json", "xml"] = "xml",
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
 ) -> AsyncIterator[DenoEnv]:
@@ -193,7 +195,7 @@ def _deno_run_args(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal['json', 'xml'] = 'xml',
+    return_mode: Literal["json", "xml"] = "xml",
     allow_networking: bool = True,
 ) -> list[str]:
     args = ["run"]
@@ -223,4 +225,6 @@ T = TypeVar("T")
 
 
 async def _asyncify(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
-    return await asyncio.get_event_loop().run_in_executor(None, partial(func, *args, **kwargs))
+    return await asyncio.get_event_loop().run_in_executor(
+        None, partial(func, *args, **kwargs)
+    )
