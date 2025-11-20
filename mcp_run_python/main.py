@@ -85,7 +85,7 @@ def prepare_deno_env(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal["json", "xml"] = "xml",
+    return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
 ) -> Iterator[DenoEnv]:
@@ -151,7 +151,7 @@ async def async_prepare_deno_env(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal["json", "xml"] = "xml",
+    return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
 ) -> AsyncIterator[DenoEnv]:
@@ -193,7 +193,7 @@ def _deno_run_args(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal["json", "xml"] = "xml",
+    return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
 ) -> list[str]:
     args = ["run"]
