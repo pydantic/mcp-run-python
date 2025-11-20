@@ -52,6 +52,7 @@ Usage: deno ... deno/main.ts [stdio|streamable_http|install_deps|noop]
 
 options:
 --port <port>             Port to run the HTTP server on (default: 3001)
+--host <host>             Host to bind to (default: 127.0.0.1)
 --deps <deps>             Comma separated list of dependencies to install
 --return-mode <xml/json>  Return mode for output data (default: xml)`
   );
