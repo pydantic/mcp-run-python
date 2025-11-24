@@ -177,7 +177,7 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 function runStreamableHttp(port: number, host:string, deps: string[], returnMode: string, stateless: boolean): void {
   const server = (stateless ? createStatelessHttpServer : createStatefulHttpServer)(deps, returnMode)
   server.listen(port, host, () => {
-    console.log(`Listening on port ${port}`)
+    console.log(`Listening on host ${host} port ${port}`)
   })
 }
 
