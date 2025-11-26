@@ -23,6 +23,7 @@ def run_mcp_server(
     mode: Mode,
     *,
     http_port: int | None = None,
+    http_host: str | None = None,
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
@@ -34,6 +35,7 @@ def run_mcp_server(
     Args:
         mode: The mode to run the server in.
         http_port: The port to run the server on if mode is `streamable_http`.
+        http_host: The host to run the server on if mode is `streamable_http`.
         dependencies: The dependencies to install.
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
@@ -49,6 +51,7 @@ def run_mcp_server(
         mode,
         dependencies=dependencies,
         http_port=http_port,
+        http_host=http_host,
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
@@ -78,6 +81,7 @@ def prepare_deno_env(
     mode: Mode,
     *,
     http_port: int | None = None,
+    http_host: str | None = None,
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
@@ -92,6 +96,7 @@ def prepare_deno_env(
     Args:
         mode: The mode to run the server in.
         http_port: The port to run the server on if mode is `streamable_http`.
+        http_host: The host to run the server on if mode is `streamable_http`.
         dependencies: The dependencies to install.
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
@@ -126,6 +131,7 @@ def prepare_deno_env(
         args = _deno_run_args(
             mode,
             http_port=http_port,
+            http_host=http_host,
             dependencies=dependencies,
             return_mode=return_mode,
             allow_networking=allow_networking,
@@ -141,6 +147,7 @@ async def async_prepare_deno_env(
     mode: Mode,
     *,
     http_port: int | None = None,
+    http_host: str | None = None,
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
@@ -151,6 +158,7 @@ async def async_prepare_deno_env(
         prepare_deno_env,
         mode,
         http_port=http_port,
+        http_host=http_host,
         dependencies=dependencies,
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
@@ -181,6 +189,7 @@ def _deno_run_args(
     mode: Mode,
     *,
     http_port: int | None = None,
+    http_host: str | None = None,
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
@@ -197,11 +206,13 @@ def _deno_run_args(
     ]
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
-    if http_port is not None:
-        if mode in ('streamable_http', 'streamable_http_stateless'):
+    if mode in ('streamable_http', 'streamable_http_stateless'):
+        if http_port is not None:
             args.append(f'--port={http_port}')
-        else:
-            raise ValueError('Port is only supported for `streamable_http` modes')
+        if http_host is not None:
+            args.append(f'--host={http_host}')
+    elif http_port is not None or http_host is not None:
+        raise ValueError('Port and host are only supported for `streamable_http` mode')
     return args
 
 
