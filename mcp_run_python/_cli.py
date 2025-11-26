@@ -20,13 +20,10 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         description=f'mcp-run-python CLI v{__version__}\n\nMCP server for running untrusted Python code.\n',
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument('--host', type=str, default='127.0.0.1',
-                        help='Host to bind the HTTP server to (default: 127.0.0.1). Use 0.0.0.0 to bind to all interfaces, e.g. when using Docker.')
+    parser.add_argument('--host', type=str, help='Host to bind the HTTP server to (default: 127.0.0.1). Use 0.0.0.0 to bind to all interfaces, e.g. when using Docker.')
     parser.add_argument('--port', type=int, help='Port to run the server on, default 3001.')
     parser.add_argument('--deps', '--dependencies', help='Comma separated list of dependencies to install')
-    parser.add_argument(
-        '--disable-networking', action='store_true', help='Disable networking during execution of python code'
-    )
+    parser.add_argument( '--disable-networking', action='store_true', help='Disable networking during execution of python code' )
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
     parser.add_argument(
