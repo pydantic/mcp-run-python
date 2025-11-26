@@ -30,11 +30,13 @@ export async function main() {
       return
     } else if (args[0] === 'streamable_http') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'], false)
+      const host = flags.host
+      runStreamableHttp(port, host, deps, flags['return-mode'], false)
       return
     } else if (args[0] === 'streamable_http_stateless') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'], true)
+      const host = flags.host
+      runStreamableHttp(port, host, deps, flags['return-mode'], true)
       return
     } else if (args[0] === 'example') {
       await example(deps)
@@ -52,6 +54,7 @@ Usage: deno ... deno/main.ts [stdio|streamable_http|streamable_http_stateless|in
 
 options:
 --port <port>             Port to run the HTTP server on (default: 3001)
+--host <host>             Host to run the HTTP server on (default: 127.0.0.1)
 --deps <deps>             Comma separated list of dependencies to install
 --return-mode <xml/json>  Return mode for output data (default: xml)`,
   )
@@ -171,9 +174,9 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[], returnMode: string, stateless: boolean): void {
+function runStreamableHttp(port: number, host:string, deps: string[], returnMode: string, stateless: boolean): void {
   const server = (stateless ? createStatelessHttpServer : createStatefulHttpServer)(deps, returnMode)
-  server.listen(port, () => {
+  server.listen(port, host, () => {
     console.log(`Listening on port ${port}`)
   })
 }
