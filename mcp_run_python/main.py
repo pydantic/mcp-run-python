@@ -11,7 +11,7 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, ParamSpec, TypeVar, cast
 
-__all__ = "run_mcp_server", "DenoEnv", "prepare_deno_env", "async_prepare_deno_env"
+__all__ = 'run_mcp_server', 'DenoEnv', 'prepare_deno_env', 'async_prepare_deno_env'
 
 logger = logging.getLogger(__name__)
 LoggingLevel = Literal['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency']
@@ -25,7 +25,7 @@ def run_mcp_server(
     http_port: int | None = None,
     http_host: str | None = None,
     dependencies: list[str] | None = None,
-    return_mode: Literal["json", "xml"] = "xml",
+    return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
     verbose: bool = False,
@@ -59,14 +59,12 @@ def run_mcp_server(
         if mode in ('streamable_http', 'streamable_http_stateless'):
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
         else:
-            logger.info("Running mcp-run-python via %s...", mode)
-
+            logger.info('Running mcp-run-python via %s...', mode)
+            
         try:
-            p = subprocess.run(
-                ("deno", *env.args), cwd=env.cwd, stdout=stdout, stderr=stderr
-            )
+            p = subprocess.run(('deno', *env.args), cwd=env.cwd, stdout=stdout, stderr=stderr)
         except KeyboardInterrupt:  # pragma: no cover
-            logger.warning("Server stopped.")
+            logger.warning('Server stopped.')
             return 0
         else:
             return p.returncode
@@ -108,29 +106,27 @@ def prepare_deno_env(
     Returns:
         Yields the deno environment details.
     """
-    cwd = Path(tempfile.mkdtemp()) / "mcp-run-python"
+    cwd = Path(tempfile.mkdtemp()) / 'mcp-run-python'
     try:
-        src = Path(__file__).parent / "deno"
-        logger.debug("Copying from %s to %s...", src, cwd)
+        src = Path(__file__).parent / 'deno'
+        logger.debug('Copying from %s to %s...', src, cwd)
         shutil.copytree(src, cwd)
-        logger.info("Installing dependencies %s...", dependencies)
+        logger.info('Installing dependencies %s...', dependencies)
 
-        args = "deno", *_deno_install_args(dependencies)
+        args = 'deno', *_deno_install_args(dependencies)
         p = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         stdout: list[str] = []
         if p.stdout is not None:
             for line in p.stdout:
                 line = line.strip()
                 if deps_log_handler:
-                    parts = line.split("|", 1)
-                    level, msg = parts if len(parts) == 2 else ("info", line)
+                    parts = line.split('|', 1)
+                    level, msg = parts if len(parts) == 2 else ('info', line)
                     deps_log_handler(cast(LoggingLevel, level), msg)
                 stdout.append(line)
         p.wait()
         if p.returncode != 0:
-            raise RuntimeError(
-                f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}'
-            )
+            raise RuntimeError(f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}')
 
         args = _deno_run_args(
             mode,
@@ -176,13 +172,13 @@ async def async_prepare_deno_env(
 
 def _deno_install_args(dependencies: list[str] | None = None) -> list[str]:
     args = [
-        "run",
-        "--allow-net",
-        "--allow-read=./node_modules",
-        "--allow-write=./node_modules",
-        "--node-modules-dir=auto",
-        "src/main.ts",
-        "noop",
+        'run',
+        '--allow-net',
+        '--allow-read=./node_modules',
+        '--allow-write=./node_modules',
+        '--node-modules-dir=auto',
+        'src/main.ts',
+        'noop',
     ]
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
@@ -198,30 +194,30 @@ def _deno_run_args(
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
 ) -> list[str]:
-    args = ["run"]
+    args = ['run']
     if allow_networking:
-        args += ["--allow-net"]
+        args += ['--allow-net']
     args += [
-        "--allow-read=./node_modules",
-        "--node-modules-dir=auto",
-        "src/main.ts",
+        '--allow-read=./node_modules',
+        '--node-modules-dir=auto',
+        'src/main.ts',
         mode,
-        f"--return-mode={return_mode}",
+        f'--return-mode={return_mode}',
     ]
     if dependencies is not None:
         args.append(f'--deps={",".join(dependencies)}')
     if mode in ('streamable_http', 'streamable_http_stateless'):
         if http_port is not None:
-            args.append(f"--port={http_port}")
+            args.append(f'--port={http_port}')
         if http_host is not None:
-            args.append(f"--host={http_host}")
+            args.append(f'--host={http_host}')
     elif http_port is not None or http_host is not None:
-        raise ValueError("Port and host are only supported for `streamable_http` mode")
+        raise ValueError('Port and host are only supported for `streamable_http` mode')
     return args
 
 
-P = ParamSpec("P")
-T = TypeVar("T")
+P = ParamSpec('P')
+T = TypeVar('T')
 
 
 async def _asyncify(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
