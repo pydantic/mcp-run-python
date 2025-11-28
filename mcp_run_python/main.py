@@ -60,7 +60,7 @@ def run_mcp_server(
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
         else:
             logger.info('Running mcp-run-python via %s...', mode)
-
+            
         try:
             p = subprocess.run(('deno', *env.args), cwd=env.cwd, stdout=stdout, stderr=stderr)
         except KeyboardInterrupt:  # pragma: no cover
@@ -126,9 +126,7 @@ def prepare_deno_env(
                 stdout.append(line)
         p.wait()
         if p.returncode != 0:
-            raise RuntimeError(
-                f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}'
-            )
+            raise RuntimeError(f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}')
 
         args = _deno_run_args(
             mode,
