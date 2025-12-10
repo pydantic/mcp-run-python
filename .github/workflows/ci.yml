@@ -25,7 +25,7 @@ jobs:
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.5.5
+          deno-version: v2.5.x
 
       - uses: actions/cache@v4
         with:
@@ -52,7 +52,7 @@ jobs:
           enable-cache: true
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.5.5
+          deno-version: v2.5.x
       - run: uv sync
       - run: make test
         env:
