@@ -18,7 +18,7 @@
     "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.17.5",
     "@std/cli": "jsr:@std/cli@^1.0.15",
     "@std/path": "jsr:@std/path@^1.0.8",
-    "pyodide": "npm:pyodide@0.29.0",
+    "pyodide": "npm:pyodide@0.28.2",
     "zod": "npm:zod@^3.24.4"
   },
   "fmt": {
