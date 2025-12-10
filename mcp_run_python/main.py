@@ -105,7 +105,7 @@ def prepare_deno_env(
     try:
         src = Path(__file__).parent / 'deno'
         logger.debug('Copying from %s to %s...', src, cwd)
-        shutil.copytree(src, cwd)
+        shutil.copytree(src, cwd, ignore=shutil.ignore_patterns('node_modules'))
         logger.info('Installing dependencies %s...', dependencies)
 
         args = 'deno', *_deno_install_args(dependencies)
