@@ -48,7 +48,7 @@ export async function main() {
     `\
 Invalid arguments: ${args.join(' ')}
 
-Usage: deno ... deno/main.ts [stdio|streamable_http|streamable_http_stateless|install_deps|noop]
+Usage: deno ... deno/main.ts [stdio|streamable_http|streamable_http_stateless|example|noop]
 
 options:
 --port <port>             Port to run the HTTP server on (default: 3001)
