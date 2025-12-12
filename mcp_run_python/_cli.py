@@ -20,7 +20,11 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         description=f'mcp-run-python CLI v{__version__}\n\nMCP server for running untrusted Python code.\n',
         formatter_class=argparse.RawTextHelpFormatter,
     )
-
+    parser.add_argument(
+        '--host',
+        type=str,
+        help='Host to bind the HTTP server to (default: 127.0.0.1). Use 0.0.0.0 to bind to all interfaces, e.g. when using Docker.',
+    )
     parser.add_argument('--port', type=int, help='Port to run the server on, default 3001.')
     parser.add_argument('--deps', '--dependencies', help='Comma separated list of dependencies to install')
     parser.add_argument(
@@ -51,6 +55,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             args.mode.replace('-', '_'),
             allow_networking=not args.disable_networking,
             http_port=args.port,
+            http_host=args.host,
             dependencies=deps,
             deps_log_handler=deps_log_handler,
             verbose=bool(args.verbose),
