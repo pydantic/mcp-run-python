@@ -60,7 +60,7 @@ def run_mcp_server(
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
         else:
             logger.info('Running mcp-run-python via %s...', mode)
-            
+
         try:
             p = subprocess.run(('deno', *env.args), cwd=env.cwd, stdout=stdout, stderr=stderr)
         except KeyboardInterrupt:  # pragma: no cover
