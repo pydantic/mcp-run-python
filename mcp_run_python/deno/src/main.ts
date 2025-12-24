@@ -174,7 +174,7 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, host:string, deps: string[], returnMode: string, stateless: boolean): void {
+function runStreamableHttp(port: number, host: string, deps: string[], returnMode: string, stateless: boolean): void {
   const server = (stateless ? createStatelessHttpServer : createStatefulHttpServer)(deps, returnMode)
   server.listen(port, host, () => {
     console.log(`Listening on port ${port}`)
