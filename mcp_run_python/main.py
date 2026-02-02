@@ -24,6 +24,7 @@ def run_mcp_server(
     *,
     http_port: int | None = None,
     dependencies: list[str] | None = None,
+    index_urls: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
@@ -35,6 +36,7 @@ def run_mcp_server(
         mode: The mode to run the server in.
         http_port: The port to run the server on if mode is `streamable_http`.
         dependencies: The dependencies to install.
+        index_urls: Package index URLs for installing dependencies (tried in order before PyPI).
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
@@ -48,6 +50,7 @@ def run_mcp_server(
     with prepare_deno_env(
         mode,
         dependencies=dependencies,
+        index_urls=index_urls,
         http_port=http_port,
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
@@ -79,6 +82,7 @@ def prepare_deno_env(
     *,
     http_port: int | None = None,
     dependencies: list[str] | None = None,
+    index_urls: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
@@ -93,6 +97,7 @@ def prepare_deno_env(
         mode: The mode to run the server in.
         http_port: The port to run the server on if mode is `streamable_http`.
         dependencies: The dependencies to install.
+        index_urls: Package index URLs for installing dependencies (tried in order before PyPI).
         return_mode: The mode to return tool results in.
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether the prepared DenoEnv should allow networking when running code.
@@ -108,7 +113,7 @@ def prepare_deno_env(
         shutil.copytree(src, cwd, ignore=shutil.ignore_patterns('node_modules'))
         logger.info('Installing dependencies %s...', dependencies)
 
-        args = 'deno', *_deno_install_args(dependencies)
+        args = 'deno', *_deno_install_args(dependencies, index_urls)
         p = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         stdout: list[str] = []
         if p.stdout is not None:
@@ -127,6 +132,7 @@ def prepare_deno_env(
             mode,
             http_port=http_port,
             dependencies=dependencies,
+            index_urls=index_urls,
             return_mode=return_mode,
             allow_networking=allow_networking,
         )
@@ -142,6 +148,7 @@ async def async_prepare_deno_env(
     *,
     http_port: int | None = None,
     dependencies: list[str] | None = None,
+    index_urls: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
@@ -152,6 +159,7 @@ async def async_prepare_deno_env(
         mode,
         http_port=http_port,
         dependencies=dependencies,
+        index_urls=index_urls,
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
@@ -162,7 +170,7 @@ async def async_prepare_deno_env(
         await _asyncify(ct.__exit__, None, None, None)
 
 
-def _deno_install_args(dependencies: list[str] | None = None) -> list[str]:
+def _deno_install_args(dependencies: list[str] | None = None, index_urls: list[str] | None = None) -> list[str]:
     args = [
         'run',
         '--allow-net',
@@ -173,7 +181,11 @@ def _deno_install_args(dependencies: list[str] | None = None) -> list[str]:
         'noop',
     ]
     if dependencies is not None:
-        args.append(f'--deps={",".join(dependencies)}')
+        for dep in dependencies:
+            args.append(f'--dep={dep}')
+    if index_urls:
+        for url in index_urls:
+            args.append(f'--index-url={url}')
     return args
 
 
@@ -182,6 +194,7 @@ def _deno_run_args(
     *,
     http_port: int | None = None,
     dependencies: list[str] | None = None,
+    index_urls: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
 ) -> list[str]:
@@ -196,7 +209,11 @@ def _deno_run_args(
         f'--return-mode={return_mode}',
     ]
     if dependencies is not None:
-        args.append(f'--deps={",".join(dependencies)}')
+        for dep in dependencies:
+            args.append(f'--dep={dep}')
+    if index_urls:
+        for url in index_urls:
+            args.append(f'--index-url={url}')
     if http_port is not None:
         if mode in ('streamable_http', 'streamable_http_stateless'):
             args.append(f'--port={http_port}')

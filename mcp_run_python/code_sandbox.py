@@ -54,6 +54,7 @@ class CodeSandbox:
 async def code_sandbox(
     *,
     dependencies: list[str] | None = None,
+    index_urls: list[str] | None = None,
     log_handler: LogHandler | None = None,
     allow_networking: bool = True,
 ) -> AsyncIterator['CodeSandbox']:
@@ -61,6 +62,7 @@ async def code_sandbox(
 
     Args:
         dependencies: A list of dependencies to be installed.
+        index_urls: Package index URLs for installing dependencies (tried in order before PyPI).
         log_handler: A callback function to handle print statements when code is running.
         deps_log_handler: A callback function to run on log statements during initial install of dependencies.
         allow_networking: Whether to allow networking or not while executing python code.
@@ -68,6 +70,7 @@ async def code_sandbox(
     async with async_prepare_deno_env(
         'stdio',
         dependencies=dependencies,
+        index_urls=index_urls,
         deps_log_handler=log_handler,
         return_mode='json',
         allow_networking=allow_networking,

@@ -21,26 +21,37 @@ export async function main() {
   const { args } = Deno
   const flags = parseArgs(Deno.args, {
     string: ['deps', 'return-mode', 'port'],
+    collect: ['dep', 'index-url'],
     default: { port: '3001', 'return-mode': 'xml' },
   })
-  const deps = flags.deps?.split(',') ?? []
+
+  // Deprecation warnings for old comma-separated args
+  if (flags.deps) {
+    console.warn('Warning: --deps is deprecated, use --dep instead (can be repeated)')
+  }
+  // Support both new repeatable args and old comma-separated (backwards compat)
+  const deps: string[] = [
+    ...((flags.dep as string[] | undefined) ?? []),
+    ...(flags.deps?.split(',').filter(Boolean) ?? []),
+  ]
+  const indexUrls: string[] = (flags['index-url'] as string[] | undefined) ?? []
   if (args.length >= 1) {
     if (args[0] === 'stdio') {
-      await runStdio(deps, flags['return-mode'])
+      await runStdio(deps, indexUrls, flags['return-mode'])
       return
     } else if (args[0] === 'streamable_http') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'], false)
+      runStreamableHttp(port, deps, indexUrls, flags['return-mode'], false)
       return
     } else if (args[0] === 'streamable_http_stateless') {
       const port = parseInt(flags.port)
-      runStreamableHttp(port, deps, flags['return-mode'], true)
+      runStreamableHttp(port, deps, indexUrls, flags['return-mode'], true)
       return
     } else if (args[0] === 'example') {
-      await example(deps)
+      await example(deps, indexUrls)
       return
     } else if (args[0] === 'noop') {
-      await installDeps(deps)
+      await installDeps(deps, indexUrls)
       return
     }
   }
@@ -51,9 +62,10 @@ Invalid arguments: ${args.join(' ')}
 Usage: deno ... deno/main.ts [stdio|streamable_http|streamable_http_stateless|example|noop]
 
 options:
---port <port>             Port to run the HTTP server on (default: 3001)
---deps <deps>             Comma separated list of dependencies to install
---return-mode <xml/json>  Return mode for output data (default: xml)`,
+--port <port>               Port to run the HTTP server on (default: 3001)
+--dep <pkg>                 Dependency to install (can be repeated)
+--index-url <url>           Package index URL (can be repeated, tried before PyPI)
+--return-mode <xml/json>    Return mode for output data (default: xml)`,
   )
   Deno.exit(1)
 }
@@ -61,7 +73,7 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(deps: string[], returnMode: string): McpServer {
+function createServer(deps: string[], indexUrls: string[], returnMode: string): McpServer {
   const runCode = new RunCode()
   const server = new McpServer(
     {
@@ -106,6 +118,7 @@ The code will be executed with Python 3.13.
       const logPromises: Promise<void>[] = []
       const result = await runCode.run(
         deps,
+        indexUrls,
         (level, data) => {
           if (LogLevels.indexOf(level) >= LogLevels.indexOf(setLogLevel)) {
             logPromises.push(server.server.sendLoggingMessage({ level, data }))
@@ -171,14 +184,20 @@ function httpSetJsonResponse(res: http.ServerResponse, status: number, text: str
 /*
  * Run the MCP server using the Streamable HTTP transport
  */
-function runStreamableHttp(port: number, deps: string[], returnMode: string, stateless: boolean): void {
-  const server = (stateless ? createStatelessHttpServer : createStatefulHttpServer)(deps, returnMode)
+function runStreamableHttp(
+  port: number,
+  deps: string[],
+  indexUrls: string[],
+  returnMode: string,
+  stateless: boolean,
+): void {
+  const server = (stateless ? createStatelessHttpServer : createStatefulHttpServer)(deps, indexUrls, returnMode)
   server.listen(port, () => {
     console.log(`Listening on port ${port}`)
   })
 }
 
-function createStatelessHttpServer(deps: string[], returnMode: string): http.Server {
+function createStatelessHttpServer(deps: string[], indexUrls: string[], returnMode: string): http.Server {
   return http.createServer(async (req, res) => {
     const url = httpGetUrl(req)
 
@@ -188,7 +207,7 @@ function createStatelessHttpServer(deps: string[], returnMode: string): http.Ser
     }
 
     try {
-      const mcpServer = createServer(deps, returnMode)
+      const mcpServer = createServer(deps, indexUrls, returnMode)
       const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       })
@@ -211,10 +230,10 @@ function createStatelessHttpServer(deps: string[], returnMode: string): http.Ser
   })
 }
 
-function createStatefulHttpServer(deps: string[], returnMode: string): http.Server {
+function createStatefulHttpServer(deps: string[], indexUrls: string[], returnMode: string): http.Server {
   // Stateful mode with session management
   // https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
-  const mcpServer = createServer(deps, returnMode)
+  const mcpServer = createServer(deps, indexUrls, returnMode)
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
   return http.createServer(async (req, res) => {
@@ -293,8 +312,8 @@ function createStatefulHttpServer(deps: string[], returnMode: string): http.Serv
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio(deps: string[], returnMode: string) {
-  const mcpServer = createServer(deps, returnMode)
+async function runStdio(deps: string[], indexUrls: string[], returnMode: string) {
+  const mcpServer = createServer(deps, indexUrls, returnMode)
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }
@@ -302,10 +321,11 @@ async function runStdio(deps: string[], returnMode: string) {
 /*
  * Run pyodide to download and install dependencies.
  */
-async function installDeps(deps: string[]) {
+async function installDeps(deps: string[], indexUrls: string[]) {
   const runCode = new RunCode()
   const result = await runCode.run(
     deps,
+    indexUrls,
     (level, data) => console.error(`${level}|${data}`),
   )
   if (result.status !== 'success') {
@@ -317,7 +337,7 @@ async function installDeps(deps: string[]) {
 /*
  * Run a short example script that requires numpy.
  */
-async function example(deps: string[]) {
+async function example(deps: string[], indexUrls: string[]) {
   console.error(
     `Running example script for MCP Run Python version ${VERSION}...`,
   )
@@ -330,6 +350,7 @@ a
   const runCode = new RunCode()
   const result = await runCode.run(
     deps,
+    indexUrls,
     // use warn to avoid recursion since console.log is patched in runCode
     (level, data) => console.warn(`${level}: ${data}`),
     { name: 'example.py', content: code },

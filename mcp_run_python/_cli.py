@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import argparse
 import logging
 import sys
+import warnings
 from collections.abc import Sequence
 
 from . import __version__
@@ -22,7 +23,17 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     )
 
     parser.add_argument('--port', type=int, help='Port to run the server on, default 3001.')
-    parser.add_argument('--deps', '--dependencies', help='Comma separated list of dependencies to install')
+    parser.add_argument(
+        '--dep', action='append', dest='dep_list', metavar='PKG', help='Dependency to install (can be repeated)'
+    )
+    parser.add_argument('--deps', '--dependencies', help=argparse.SUPPRESS)
+    parser.add_argument(
+        '--index-url',
+        action='append',
+        dest='index_urls',
+        metavar='URL',
+        help='Package index URL for installing dependencies (can be repeated, tried in order before PyPI)',
+    )
     parser.add_argument(
         '--disable-networking', action='store_true', help='Disable networking during execution of python code'
     )
@@ -46,12 +57,21 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             format='%(message)s',
         )
 
-        deps: list[str] = args.deps.split(',') if args.deps else []
+        deps: list[str] = args.dep_list or []
+        if args.deps:
+            warnings.warn(
+                '--deps is deprecated, use --dep instead (can be repeated)',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deps.extend(args.deps.split(','))
+        index_urls: list[str] = args.index_urls or []
         return_code = run_mcp_server(
             args.mode.replace('-', '_'),
             allow_networking=not args.disable_networking,
             http_port=args.port,
             dependencies=deps,
+            index_urls=index_urls,
             deps_log_handler=deps_log_handler,
             verbose=bool(args.verbose),
         )

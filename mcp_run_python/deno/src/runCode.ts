@@ -23,6 +23,7 @@ export class RunCode {
 
   async run(
     dependencies: string[],
+    indexUrls: string[],
     log: (level: LoggingLevel, data: string) => void,
     file?: CodeFile,
     globals?: Record<string, any>,
@@ -38,7 +39,7 @@ export class RunCode {
       sys = pyodide.pyimport('sys')
     } else {
       if (!this.prepPromise) {
-        this.prepPromise = this.prepEnv(dependencies, log)
+        this.prepPromise = this.prepEnv(dependencies, indexUrls, log)
       }
       // TODO is this safe if the promise has already been accessed? it seems to work fine
       const prep = await this.prepPromise
@@ -83,6 +84,7 @@ export class RunCode {
 
   async prepEnv(
     dependencies: string[],
+    indexUrls: string[],
     log: (level: LoggingLevel, data: string) => void,
   ): Promise<PrepResult> {
     const pyodide = await loadPyodide({
@@ -122,7 +124,10 @@ export class RunCode {
 
     const preparePyEnv: PreparePyEnv = pyodide.pyimport(moduleName)
 
-    const prepareStatus = await preparePyEnv.prepare_env(pyodide.toPy(dependencies))
+    const prepareStatus = await preparePyEnv.prepare_env(
+      pyodide.toPy(dependencies),
+      pyodide.toPy(indexUrls),
+    )
     return {
       pyodide,
       preparePyEnv,
@@ -214,6 +219,6 @@ interface PrepareError {
   message: string
 }
 interface PreparePyEnv {
-  prepare_env: (files: CodeFile[]) => Promise<PrepareSuccess | PrepareError>
+  prepare_env: (dependencies: any, index_urls: any) => Promise<PrepareSuccess | PrepareError>
   dump_json: (value: any, always_return_json: boolean) => string | null
 }
