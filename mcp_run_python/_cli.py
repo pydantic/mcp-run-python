@@ -26,6 +26,9 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
     parser.add_argument(
         '--disable-networking', action='store_true', help='Disable networking during execution of python code'
     )
+    parser.add_argument(
+        '--offline', action='store_true', help='Run in offline mode using pre-cached dependencies (no network access)'
+    )
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
     parser.add_argument(
@@ -54,6 +57,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
             dependencies=deps,
             deps_log_handler=deps_log_handler,
             verbose=bool(args.verbose),
+            offline=bool(args.offline),
         )
         return return_code
     else:

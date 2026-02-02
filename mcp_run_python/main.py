@@ -28,6 +28,7 @@ def run_mcp_server(
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
     verbose: bool = False,
+    offline: bool = False,
 ) -> int:
     """Install dependencies then run the mcp-run-python server.
 
@@ -39,6 +40,7 @@ def run_mcp_server(
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether to allow networking when running provided python code.
         verbose: Log deno outputs to CLI
+        offline: Run in offline mode using pre-cached dependencies (no network access).
     """
 
     stdout, stderr = None, None
@@ -52,6 +54,7 @@ def run_mcp_server(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        offline=offline,
     ) as env:
         if mode in ('streamable_http', 'streamable_http_stateless'):
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
@@ -82,6 +85,7 @@ def prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    offline: bool = False,
 ) -> Iterator[DenoEnv]:
     """Prepare the deno environment for running the mcp-run-python server with Deno.
 
@@ -97,6 +101,7 @@ def prepare_deno_env(
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether the prepared DenoEnv should allow networking when running code.
             Note that we always allow networking during environment initialization to install dependencies.
+        offline: Run in offline mode using pre-cached dependencies (no network access).
 
     Returns:
         Yields the deno environment details.
@@ -105,23 +110,28 @@ def prepare_deno_env(
     try:
         src = Path(__file__).parent / 'deno'
         logger.debug('Copying from %s to %s...', src, cwd)
-        shutil.copytree(src, cwd, ignore=shutil.ignore_patterns('node_modules'))
-        logger.info('Installing dependencies %s...', dependencies)
+        if offline:
+            # In offline mode, include node_modules to use pre-cached dependencies
+            shutil.copytree(src, cwd)
+            logger.info('Running in offline mode with pre-cached dependencies')
+        else:
+            shutil.copytree(src, cwd, ignore=shutil.ignore_patterns('node_modules'))
+            logger.info('Installing dependencies %s...', dependencies)
 
-        args = 'deno', *_deno_install_args(dependencies)
-        p = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        stdout: list[str] = []
-        if p.stdout is not None:
-            for line in p.stdout:
-                line = line.strip()
-                if deps_log_handler:
-                    parts = line.split('|', 1)
-                    level, msg = parts if len(parts) == 2 else ('info', line)
-                    deps_log_handler(cast(LoggingLevel, level), msg)
-                stdout.append(line)
-        p.wait()
-        if p.returncode != 0:
-            raise RuntimeError(f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}')
+            args = 'deno', *_deno_install_args(dependencies)
+            p = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            stdout: list[str] = []
+            if p.stdout is not None:
+                for line in p.stdout:
+                    line = line.strip()
+                    if deps_log_handler:
+                        parts = line.split('|', 1)
+                        level, msg = parts if len(parts) == 2 else ('info', line)
+                        deps_log_handler(cast(LoggingLevel, level), msg)
+                    stdout.append(line)
+            p.wait()
+            if p.returncode != 0:
+                raise RuntimeError(f'`deno run ...` returned a non-zero exit code {p.returncode}: {"".join(stdout)}')
 
         args = _deno_run_args(
             mode,
@@ -129,6 +139,7 @@ def prepare_deno_env(
             dependencies=dependencies,
             return_mode=return_mode,
             allow_networking=allow_networking,
+            offline=offline,
         )
         yield DenoEnv(cwd, args)
 
@@ -145,6 +156,7 @@ async def async_prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    offline: bool = False,
 ) -> AsyncIterator[DenoEnv]:
     """Async variant of `prepare_deno_env`."""
     ct = await _asyncify(
@@ -155,6 +167,7 @@ async def async_prepare_deno_env(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        offline=offline,
     )
     try:
         yield await _asyncify(ct.__enter__)
@@ -184,9 +197,14 @@ def _deno_run_args(
     dependencies: list[str] | None = None,
     return_mode: Literal['json', 'xml'] = 'xml',
     allow_networking: bool = True,
+    offline: bool = False,
 ) -> list[str]:
     args = ['run']
+    if offline:
+        # In offline mode, use cached dependencies only (no network access for downloads)
+        args += ['--cached-only']
     if allow_networking:
+        # Allow network for server to listen on port (even in offline mode)
         args += ['--allow-net']
     args += [
         '--allow-read=./node_modules',

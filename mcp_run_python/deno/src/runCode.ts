@@ -2,6 +2,16 @@
 import { loadPyodide, type PyodideInterface } from 'pyodide'
 import { preparePythonCode } from './prepareEnvCode.ts'
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js'
+import { dirname, fromFileUrl, join } from '@std/path'
+
+// Get the path to the pyodide package in node_modules for offline use
+function getPyodideIndexURL(): string {
+  // Resolve the path to node_modules/pyodide relative to this file
+  const thisDir = dirname(fromFileUrl(import.meta.url))
+  const pyodidePath = join(thisDir, '..', 'node_modules', 'pyodide')
+  // Return path with trailing slash (pyodide expects this format)
+  return pyodidePath + '/'
+}
 
 export interface CodeFile {
   name: string
@@ -86,6 +96,8 @@ export class RunCode {
     log: (level: LoggingLevel, data: string) => void,
   ): Promise<PrepResult> {
     const pyodide = await loadPyodide({
+      // Use local pyodide packages from node_modules for offline support
+      indexURL: getPyodideIndexURL(),
       stdout: (msg) => {
         log('info', msg)
         this.output.push(msg)
