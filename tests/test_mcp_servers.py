@@ -76,12 +76,24 @@ async def test_list_tools(run_mcp_session: Callable[[list[str]], AbstractAsyncCo
     async with run_mcp_session([]) as mcp_session:
         await mcp_session.initialize()
         tools = await mcp_session.list_tools()
-        assert len(tools.tools) == 1
-        tool = tools.tools[0]
-        assert tool.name == 'run_python_code'
-        assert tool.description
-        assert tool.description.startswith('Tool to execute Python code and return stdout, stderr, and return value.')
-        assert tool.inputSchema == snapshot(
+        assert len(tools.tools) == 2
+
+        # Find tools by name since order may vary
+        tool_by_name = {t.name: t for t in tools.tools}
+
+        # Check discover_available_tools tool
+        discover_tool = tool_by_name['discover_available_tools']
+        assert discover_tool.description
+        assert 'Discover what tools are available' in discover_tool.description
+        assert discover_tool.inputSchema['properties'] == {}
+
+        # Check run_python_code tool
+        run_tool = tool_by_name['run_python_code']
+        assert run_tool.description
+        assert run_tool.description.startswith(
+            'Tool to execute Python code and return stdout, stderr, and return value.'
+        )
+        assert run_tool.inputSchema == snapshot(
             {
                 'type': 'object',
                 'properties': {
@@ -226,3 +238,31 @@ async def test_install_run_python_code() -> None:
 </return_value>\
 """
                 )
+
+
+async def test_discover_available_tools(
+    run_mcp_session: Callable[[list[str]], AbstractAsyncContextManager[ClientSession]],
+) -> None:
+    """Test the discover_available_tools functionality."""
+    async with run_mcp_session([]) as mcp_session:
+        await mcp_session.initialize()
+        result = await mcp_session.call_tool('discover_available_tools', {})
+
+        assert len(result.content) == 1
+        content = result.content[0]
+        assert isinstance(content, types.TextContent)
+
+        # Parse the response to verify structure
+        import json
+
+        response_data = json.loads(content.text)
+
+        assert 'available_tools' in response_data
+        assert 'tool_schemas' in response_data
+        assert 'usage_note' in response_data
+        assert isinstance(response_data['available_tools'], list)
+        assert isinstance(response_data['tool_schemas'], dict)
+
+        # Should initially return empty tools since no elicitation callback is set up
+        assert response_data['available_tools'] == []
+        assert response_data['tool_schemas'] == {}
