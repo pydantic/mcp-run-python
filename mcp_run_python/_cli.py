@@ -41,7 +41,7 @@ def cli_logic(args_list: Sequence[str] | None = None) -> int:
         return 0
     elif args.mode:
         logging.basicConfig(
-            level=logging.DEBUG if args.verbose else logging.INFO,
+            level=logging.DEBUG if args.verbose else logging.ERROR,
             stream=sys.stderr,
             format='%(message)s',
         )

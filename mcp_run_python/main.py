@@ -52,6 +52,7 @@ def run_mcp_server(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        quiet=not verbose,
     ) as env:
         if mode in ('streamable_http', 'streamable_http_stateless'):
             logger.info('Running mcp-run-python via %s on port %d...', mode, http_port)
@@ -82,6 +83,7 @@ def prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    quiet: bool = False,
 ) -> Iterator[DenoEnv]:
     """Prepare the deno environment for running the mcp-run-python server with Deno.
 
@@ -97,6 +99,7 @@ def prepare_deno_env(
         deps_log_handler: Optional function to receive logs emitted while installing dependencies.
         allow_networking: Whether the prepared DenoEnv should allow networking when running code.
             Note that we always allow networking during environment initialization to install dependencies.
+        quiet: Suppresses diagnostic output from Deno when installing dependencies.
 
     Returns:
         Yields the deno environment details.
@@ -108,7 +111,7 @@ def prepare_deno_env(
         shutil.copytree(src, cwd, ignore=shutil.ignore_patterns('node_modules'))
         logger.info('Installing dependencies %s...', dependencies)
 
-        args = 'deno', *_deno_install_args(dependencies)
+        args = 'deno', *_deno_install_args(dependencies, quiet=quiet)
         p = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         stdout: list[str] = []
         if p.stdout is not None:
@@ -145,6 +148,7 @@ async def async_prepare_deno_env(
     return_mode: Literal['json', 'xml'] = 'xml',
     deps_log_handler: LogHandler | None = None,
     allow_networking: bool = True,
+    quiet: bool = False,
 ) -> AsyncIterator[DenoEnv]:
     """Async variant of `prepare_deno_env`."""
     ct = await _asyncify(
@@ -155,6 +159,7 @@ async def async_prepare_deno_env(
         return_mode=return_mode,
         deps_log_handler=deps_log_handler,
         allow_networking=allow_networking,
+        quiet=quiet,
     )
     try:
         yield await _asyncify(ct.__enter__)
@@ -162,9 +167,11 @@ async def async_prepare_deno_env(
         await _asyncify(ct.__exit__, None, None, None)
 
 
-def _deno_install_args(dependencies: list[str] | None = None) -> list[str]:
-    args = [
-        'run',
+def _deno_install_args(dependencies: list[str] | None = None, quiet: bool = False) -> list[str]:
+    args = ['run']
+    if quiet:
+        args += ['--quiet']
+    args += [
         '--allow-net',
         '--allow-read=./node_modules',
         '--allow-write=./node_modules',
